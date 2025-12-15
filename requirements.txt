@@ -1,0 +1,7 @@
+gliner==0.2.24
+torch==2.9.1
+transformers==4.57.3
+huggingface_hub
+onnxruntime
+sentencepiece
+tqdm
