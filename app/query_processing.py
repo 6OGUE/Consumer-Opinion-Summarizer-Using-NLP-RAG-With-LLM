@@ -69,20 +69,37 @@ def extract_product_name(query: str, threshold: float = 0.4):
 
 def validate_and_extract_product(query: str, threshold: float = 0.4) -> Tuple[bool, str]:
     if not query or not query.strip():
-        return False, "Query is Empty"
+        result=False
+        emptiness=True
+        suggestions=None
+        extracted=None
+        return result, emptiness, suggestions, extracted
     
     product = extract_product_name(query, threshold)
     
     if product is None:
-        return False, "No Match || No Suggestions"
+        result=False
+        emptiness=False
+        suggestions=None
+        extracted=None
+        return result, emptiness, suggestions, extracted
     extracted_lower = product.strip().lower()
     query_lower = query.strip().lower()
     if extracted_lower == query_lower:
-        return True, query.strip()
+        result=True
+        emptiness=False
+        suggestions=None
+        extracted=query
+        return result, emptiness, suggestions, extracted
     if extracted_lower in query_lower:
-        return False, f"No Match || Suggestions: {product.strip()}"
+        result=False
+        emptiness=False
+        suggestions=product.strip()
+        extracted=None
+        return result, emptiness, suggestions, extracted
     return False, f"No Match || Suggestions: {product.strip()}"
 
 
 
-print(validate_and_extract_product("Asus Tuff Gaming Laptop"))
+print(validate_and_extract_product("Asus Tuff Gaming Laptop"),end='')
+print(" // result, emptiness, suggestions, extracted")
