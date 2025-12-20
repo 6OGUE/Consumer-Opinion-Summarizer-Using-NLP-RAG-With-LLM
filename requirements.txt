@@ -5,3 +5,5 @@ huggingface_hub
 onnxruntime
 sentencepiece
 tqdm
+google-genai
+python-dotenv

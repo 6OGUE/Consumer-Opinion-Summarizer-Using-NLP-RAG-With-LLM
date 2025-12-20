@@ -1,8 +1,6 @@
 import warnings
-import torch
 from gliner import GLiNER
 from typing import Optional, Tuple
-
 #################### This is for cleaner terminal output #########################
 import os
 import logging
@@ -65,41 +63,31 @@ def extract_product_name(query: str, threshold: float = 0.4):
         return None
 
 
-
-
-def validate_and_extract_product(query: str, threshold: float = 0.4) -> Tuple[bool, str]:
+def validate_and_extract_product(query: str, threshold: float = 0.4) -> Tuple[bool, bool, Optional[str], Optional[str]]:
     if not query or not query.strip():
-        result=False
-        emptiness=True
-        suggestions=None
-        extracted=None
-        return result, emptiness, suggestions, extracted
+        return False, True, None, None
     
     product = extract_product_name(query, threshold)
     
     if product is None:
-        result=False
-        emptiness=False
-        suggestions=None
-        extracted=None
-        return result, emptiness, suggestions, extracted
+        return False, False, None, None
+        
     extracted_lower = product.strip().lower()
     query_lower = query.strip().lower()
+    
     if extracted_lower == query_lower:
-        result=True
-        emptiness=False
-        suggestions=None
-        extracted=query
-        return result, emptiness, suggestions, extracted
+        return True, False, None, query
+        
     if extracted_lower in query_lower:
-        result=False
-        emptiness=False
-        suggestions=product.strip()
-        extracted=None
-        return result, emptiness, suggestions, extracted
-    return False, f"No Match || Suggestions: {product.strip()}"
+        return False, False, product.strip(), None
+        
+    return False, False, product.strip(), None
 
 
-
-print(validate_and_extract_product("Asus Tuff Gaming Laptop"),end='')
-print(" // result, emptiness, suggestions, extracted")
+query="Asus tuff gaming laptop"
+query=query.strip().lower()
+result,emptiness,suggestion,extracted=validate_and_extract_product(query)
+print("Result -",result)
+print("Emptiness -",emptiness)
+print("Suggestion -",suggestion)
+print("Extracted -",extracted)
