@@ -1,10 +1,13 @@
 import os
 from google import genai
 import json
+from fastapi import FastAPI
+from pydantic import BaseModel
+from typing import Optional
 from dotenv import load_dotenv
 load_dotenv()
 api_key = os.getenv("api_key")
-client = genai.Client(api_key)
+client = genai.Client(api_key=api_key)
 def extract_product_llm(query: str): # pass query as param
     prompt = f"""
     You are an information extraction system.
@@ -47,7 +50,21 @@ def extract_product_llm(query: str): # pass query as param
     except Exception as e:
         print(f"LLM Error: {e}")
         return None, False
+    
+app = FastAPI()
+class QueryRequest(BaseModel):
+    query: str
+class QueryResponse(BaseModel):
+    result: bool
+    extracted: Optional[str]
 
-product_name, status = extract_product_llm(query)
-print("Result -", status)
-print("Extracted -", product_name)
+
+@app.post("/llm", response_model=QueryResponse)
+def llm_process(request: QueryRequest):
+    query = request.query.strip().lower()
+    extracted, result = extract_product_llm(query)
+    
+    return QueryResponse(
+        result=result,
+        extracted=extracted
+    )

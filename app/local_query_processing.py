@@ -1,6 +1,9 @@
 import warnings
 from gliner import GLiNER
 from typing import Optional, Tuple
+from fastapi import FastAPI
+from pydantic import BaseModel
+
 #################### This is for cleaner terminal output #########################
 import os
 import logging
@@ -15,7 +18,7 @@ logging.getLogger("transformers.tokenization_utils_base").setLevel(logging.ERROR
 ###################################################################################
 
 PRODUCT_LABELS = ["product", "brand", "item", "model", "device"]
-gliner_model: Optional[GLiNER] = None # prevent unnecessary loading
+gliner_model: Optional[GLiNER] = None
 
 def _initialize_gliner_model(model_name="urchade/gliner_medium-v2.1"): 
     global gliner_model
@@ -23,9 +26,9 @@ def _initialize_gliner_model(model_name="urchade/gliner_medium-v2.1"):
         return 
 
     try:
-        gliner_model = GLiNER.from_pretrained(model_name, local_files_only=True) # check if local copy avaailable
+        gliner_model = GLiNER.from_pretrained(model_name, local_files_only=True)
     except Exception:
-        print(f"Downloading GLiNER model ('{model_name}' - first time only)...") # only download if no local copy
+        print(f"Downloading GLiNER model ('{model_name}' - first time only)...")
         gliner_model = GLiNER.from_pretrained(model_name)
 
 _initialize_gliner_model()
@@ -84,10 +87,27 @@ def validate_and_extract_product(query: str, threshold: float = 0.4) -> Tuple[bo
     return False, False, product.strip(), None
 
 
-query="Asus tuff gaming laptop"
-query=query.strip().lower()
-result,emptiness,suggestion,extracted=validate_and_extract_product(query)
-print("Result -",result)
-print("Emptiness -",emptiness)
-print("Suggestion -",suggestion)
-print("Extracted -",extracted)
+# FastAPI setup
+app = FastAPI()
+
+class QueryRequest(BaseModel):
+    query: str
+    threshold: float = 0.4
+
+class QueryResponse(BaseModel):
+    result: bool
+    emptiness: bool
+    suggestion: Optional[str]
+    extracted: Optional[str]
+
+@app.post("/local", response_model=QueryResponse)
+def local_process(request: QueryRequest):
+    query = request.query.strip().lower()
+    result, emptiness, suggestion, extracted = validate_and_extract_product(query, request.threshold)
+    
+    return QueryResponse(
+        result=result,
+        emptiness=emptiness,
+        suggestion=suggestion,
+        extracted=extracted
+    )
