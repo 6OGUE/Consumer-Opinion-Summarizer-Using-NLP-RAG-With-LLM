@@ -20,7 +20,7 @@ logging.getLogger("transformers.tokenization_utils_base").setLevel(logging.ERROR
 PRODUCT_LABELS = ["product", "brand", "item", "model", "device"]
 gliner_model: Optional[GLiNER] = None
 
-def _initialize_gliner_model(model_name="urchade/gliner_medium-v2.1"): 
+def _initialize_gliner_model(model_name="urchade/gliner_large-v2.1"): 
     global gliner_model
     if gliner_model is not None:
         return 
