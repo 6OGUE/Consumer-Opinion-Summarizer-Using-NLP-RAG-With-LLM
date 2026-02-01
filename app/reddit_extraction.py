@@ -12,8 +12,10 @@ class RedditRequest(BaseModel):
     limit: int = 100
 
 class RedditResponse(BaseModel):
+    product: str
     count: int
     comments: List[Dict]
+    
 
 # ---------------- Config ----------------
 
@@ -72,11 +74,7 @@ def fetch_comments(product: str, limit: int) -> List[Dict]:
         seen_ids.add(cid)
 
         comments.append({
-            "comment_id": cid,
-            "subreddit": item.get("subreddit"),
-            "comment_text": body,
-            "comment_score": score,
-            "created_utc": item.get("created_utc")
+            "body": body,
         })
 
     return comments
@@ -88,11 +86,12 @@ def reddit_endpoint(request: RedditRequest):
     product = request.product.strip().lower()
 
     if not product:
-        return RedditResponse(count=0, comments=[])
+        return RedditResponse(product=product, count=0, comments=[])
 
     comments = fetch_comments(product, request.limit)
 
     return RedditResponse(
+        product=product,
         count=len(comments),
         comments=comments
     )
