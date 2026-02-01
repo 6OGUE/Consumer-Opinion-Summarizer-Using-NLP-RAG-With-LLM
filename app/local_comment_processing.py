@@ -2,26 +2,41 @@ from fastapi import FastAPI
 from pydantic import BaseModel
 from typing import List, Dict
 import re
-import spacy
+import torch
+from transformers import BartTokenizer, BartForConditionalGeneration
+from keybert import KeyBERT
+from transformers import pipeline as hf_pipeline
 
 app = FastAPI()
 
-try:
-    nlp = spacy.load("en_core_web_lg")
-except OSError:
-    print("Downloading spaCy model en_core_web_lg...")
-    import subprocess
-    subprocess.run(["python", "-m", "spacy", "download", "en_core_web_lg"])
-    nlp = spacy.load("en_core_web_lg")
+BART_MODEL_NAME = "facebook/bart-large-cnn"
 
-nlp.max_length = 2000000
+print("Loading BART tokenizer...")
+bart_tokenizer = BartTokenizer.from_pretrained(BART_MODEL_NAME)
 
-class RedditResponse(BaseModel):
-    count: int
-    comments: List[Dict]
+print("Loading BART model...")
+bart_model = BartForConditionalGeneration.from_pretrained(
+    BART_MODEL_NAME,
+    dtype=torch.float16 if torch.cuda.is_available() else torch.float32
+).to("cuda" if torch.cuda.is_available() else "cpu")
+bart_model.eval()
 
+FORCED_BOS_TOKEN_ID = bart_tokenizer.get_vocab()["<s>"]
 
-URL_PATTERN = re.compile(r'http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\\(\\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+')
+print("Loading sentiment model...")
+sentiment_pipeline = hf_pipeline(
+    "sentiment-analysis",
+    model="cardiffnlp/twitter-roberta-base-sentiment",
+    device=0 if torch.cuda.is_available() else -1,
+    truncation=True,
+    max_length=512,
+)
+
+print("Loading KeyBERT...")
+kw_model = KeyBERT()
+
+URL_PATTERN = re.compile(r'http[s]?://\S+')
+
 REDDIT_PATTERNS = [
     re.compile(r'\[deleted\]'),
     re.compile(r'\[removed\]'),
@@ -33,6 +48,7 @@ REDDIT_PATTERNS = [
     re.compile(r'^\s*Edit\d*:\s*', re.MULTILINE | re.IGNORECASE),
     re.compile(r'^\s*Update:\s*', re.MULTILINE | re.IGNORECASE),
 ]
+
 EMOJI_PATTERN = re.compile(
     "["
     u"\U0001F600-\U0001F64F"
@@ -41,8 +57,10 @@ EMOJI_PATTERN = re.compile(
     u"\U0001F1E0-\U0001F1FF"
     u"\U00002702-\U000027B0"
     u"\U000024C2-\U0001F251"
-    "]+", flags=re.UNICODE
+    "]+",
+    flags=re.UNICODE
 )
+
 FILLER_PHRASES = [
     'i mean', 'you know', 'like', 'basically', 'literally', 'actually',
     'tbh', 'imo', 'imho', 'fwiw', 'afaik', 'to be honest', 'in my opinion',
@@ -50,94 +68,141 @@ FILLER_PHRASES = [
     'kind of', 'sort of', 'a bit', 'pretty much', 'i guess'
 ]
 
-def extract_essential_meaning(text: str) -> str:
-    if not text or len(text.strip()) < 3:
-        return ""
-    
-    doc = nlp(text)
-    
-    noun_phrases = []
-    adjectives_with_context = []
-    verbs_with_objects = []
-    sentiment_words = []
-    entities = []
-    
-    for ent in doc.ents:
-        if ent.label_ in ['PRODUCT', 'ORG', 'GPE', 'MONEY', 'PERCENT', 'QUANTITY']:
-            entities.append(ent.text)
-    
-    for chunk in doc.noun_chunks:
-        chunk_text = chunk.text.strip()
-        if len(chunk_text) > 2:
-            noun_phrases.append(chunk_text)
-    
-    for token in doc:
-        if token.pos_ == 'ADJ':
-            head_text = token.head.text if token.head.pos_ in ['NOUN', 'PROPN'] else ""
-            if head_text:
-                adjectives_with_context.append(f"{token.text} {head_text}")
-            else:
-                sentiment_words.append(token.text)
-        
-        elif token.pos_ == 'VERB' and not token.is_stop:
-            obj = [child.text for child in token.children if child.dep_ in ['dobj', 'attr', 'prep']]
-            if obj:
-                verbs_with_objects.append(f"{token.text} {' '.join(obj[:2])}")
-            else:
-                verbs_with_objects.append(token.text)
-        
-        elif token.dep_ == 'neg':
-            negation_phrase = f"not {token.head.text}"
-            sentiment_words.append(negation_phrase)
-    
-    result_parts = []
 
-    result_parts.extend(entities[:3])
-    
-    unique_noun_phrases = []
-    seen = set()
-    for phrase in noun_phrases:
-        phrase_lower = phrase.lower()
-        if phrase_lower not in seen and not any(phrase_lower in e.lower() for e in entities):
-            unique_noun_phrases.append(phrase)
-            seen.add(phrase_lower)
+class RedditResponse(BaseModel):
+    product:str
+    count: int
+    comments: List[Dict]
 
-    result_parts.extend(unique_noun_phrases[:5])
-    result_parts.extend(adjectives_with_context[:4])
-    result_parts.extend(sentiment_words[:3])
-    result_parts.extend(verbs_with_objects[:3])
-    
-    return ' '.join(result_parts)
 
-def clean_comment(text: str, comment_key: str = "body") -> str:
+class CommentResult(BaseModel):
+    summary: str
+    sentiment: str          # "positive" | "negative" | "neutral"
+    keywords: List[str]
+
+
+class ProcessingResponse(BaseModel):
+    product: str
+    count: int
+    comments: Dict[int, CommentResult]
+
+
+def get_sentiment(text: str) -> str:
+    LABEL_MAP = {
+        "LABEL_0": "negative",
+        "LABEL_1": "neutral",
+        "LABEL_2": "positive",
+    }
+    try:
+        result = sentiment_pipeline(text)[0]
+        return LABEL_MAP.get(result["label"], "neutral")
+    except Exception:
+        return "neutral"
+
+
+def summarize_with_bart(text: str, max_target_length: int = 60) -> str:
+
+    device = bart_model.device
+
+    inputs = bart_tokenizer(
+        text,
+        max_length=1024,
+        truncation=True,
+        padding="longest",
+        return_tensors="pt"
+    ).to(device)
+
+    with torch.no_grad():
+        summary_ids = bart_model.generate(
+            inputs["input_ids"],
+            attention_mask=inputs["attention_mask"],
+            max_length=max_target_length,
+            min_length=25,
+            num_beams=4,                        
+            length_penalty=1.2,
+            no_repeat_ngram_size=4,
+            early_stopping=True,
+            forced_bos_token_id=FORCED_BOS_TOKEN_ID,  
+        )
+
+    return bart_tokenizer.decode(
+        summary_ids[0],
+        skip_special_tokens=True
+    ).strip()
+
+
+def extract_keywords(text: str, top_n: int = 8) -> List[str]:
+
+    raw = kw_model.extract_keywords(
+        text,
+        top_n=top_n,
+        use_mmr=True,
+        diversity=0.5,
+    )
+    return [kw for kw, _score in raw]
+
+
+def strip_reddit_noise(text: str) -> str:
+    
     if not text or not isinstance(text, str):
         return ""
     
     text = URL_PATTERN.sub('', text)
-
     for pattern in REDDIT_PATTERNS:
         text = pattern.sub('', text)
-    
     text = EMOJI_PATTERN.sub('', text)
-    
     for phrase in FILLER_PHRASES:
-        text = re.sub(r'\b' + re.escape(phrase) + r'\b', '', text, flags=re.IGNORECASE)
-    
-    text = re.sub(r'\n+', ' ', text)
-    text = re.sub(r'\s+', ' ', text).strip()
-    
-    if len(text) > 20:
-        text = extract_essential_meaning(text)
-    
-    return text.strip()
+        text = re.sub(
+            r'\b' + re.escape(phrase) + r'\b',
+            '',
+            text,
+            flags=re.IGNORECASE
+        )
+    return re.sub(r'\s+', ' ', text).strip()
 
-@app.post("/process_comments")
-async def clean_comments(reddit_data: RedditResponse, comment_key: str = "body"):
-    cleaned_comments = {}
-    
+SUMMARISE_MIN_LENGTH = 50
+SUMMARY_LENGTH_RATIO_THRESHOLD = 0.85
+
+def process_comment(text: str) -> CommentResult:
+    cleaned = strip_reddit_noise(text)
+
+    if not cleaned:
+        return CommentResult(summary="", sentiment="neutral", keywords=[])
+    sentiment = get_sentiment(cleaned)
+    keywords = extract_keywords(cleaned) if len(cleaned) > 10 else []
+
+    if len(cleaned) < SUMMARISE_MIN_LENGTH:
+        summary = cleaned
+    else:
+        candidate = summarize_with_bart(cleaned)
+        if len(candidate) >= len(cleaned) * SUMMARY_LENGTH_RATIO_THRESHOLD:
+            summary = cleaned
+        else:
+            summary = candidate
+
+    return CommentResult(
+        summary=summary,
+        sentiment=sentiment,
+        keywords=keywords,
+    )
+
+@app.post("/process_comments", response_model=ProcessingResponse)
+async def clean_comments(
+    reddit_data: RedditResponse,
+    comment_key: str = "body",
+):
+    results: Dict[int, CommentResult] = {}
+
     for idx, comment in enumerate(reddit_data.comments):
-        original_text = comment.get(comment_key, "") if isinstance(comment, dict) else str(comment)
-        cleaned_text = clean_comment(original_text, comment_key=comment_key)
-        cleaned_comments[idx] = cleaned_text
-    
-    return {"comments": cleaned_comments}
+        original_text = (
+            comment.get(comment_key, "")
+            if isinstance(comment, dict)
+            else str(comment)
+        )
+        results[idx] = process_comment(original_text)
+
+    return ProcessingResponse(
+        product=reddit_data.product,
+        count=reddit_data.count,
+        comments=results,
+    )
