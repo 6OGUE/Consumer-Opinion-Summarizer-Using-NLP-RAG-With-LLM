@@ -31,7 +31,7 @@ def load_product_dictionary(file_path="products.txt"):
 
 load_product_dictionary()
 
-PRODUCT_LABELS = ["product", "brand", "item", "model", "device"]
+PRODUCT_LABELS = ["product"]
 gliner_model: Optional[GLiNER] = None
 
 def _initialize_gliner_model(model_name="urchade/gliner_large-v2.1"): 
@@ -52,11 +52,24 @@ def extract_product_name(query: str, threshold: float = 0.4):
         return None
 
     normalized_query = query.strip().lower()
-    for product in PRODUCT_DICT:
-        if product in normalized_query or product.startswith(normalized_query):
-            return product     
 
- 
+    for product in PRODUCT_DICT:
+        if product.lower() == normalized_query:
+            return product
+
+    for product in PRODUCT_DICT:
+        if normalized_query in product.lower():
+            return product
+
+    best_match = None
+    for product in PRODUCT_DICT:
+        if product.lower() in normalized_query:
+            if best_match is None or len(product) > len(best_match):
+                best_match = product
+
+    if best_match:
+        return best_match
+    
     if not gliner_model:
         return None
 
@@ -65,7 +78,7 @@ def extract_product_name(query: str, threshold: float = 0.4):
             normalized_query, 
             PRODUCT_LABELS, 
             threshold=threshold,
-            flat_ner=True  
+            flat_ner=False  
         )
         
         if not entities:
