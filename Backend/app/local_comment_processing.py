@@ -17,11 +17,9 @@ bart_tokenizer = BartTokenizer.from_pretrained(BART_MODEL_NAME)
 print("Loading BART model...")
 bart_model = BartForConditionalGeneration.from_pretrained(
     BART_MODEL_NAME,
-    dtype=torch.float16 if torch.cuda.is_available() else torch.float32
+    torch_dtype=torch.float16 if torch.cuda.is_available() else torch.float32
 ).to("cuda" if torch.cuda.is_available() else "cpu")
 bart_model.eval()
-
-FORCED_BOS_TOKEN_ID = bart_tokenizer.get_vocab()["<s>"]
 
 print("Loading sentiment model...")
 sentiment_pipeline = hf_pipeline(
@@ -70,14 +68,14 @@ FILLER_PHRASES = [
 
 
 class RedditResponse(BaseModel):
-    product:str
+    product: str
     count: int
     comments: List[Dict]
 
 
 class CommentResult(BaseModel):
     summary: str
-    sentiment: str          # "positive" | "negative" | "neutral"
+    sentiment: str          
     keywords: List[str]
 
 
@@ -101,7 +99,6 @@ def get_sentiment(text: str) -> str:
 
 
 def summarize_with_bart(text: str, max_target_length: int = 60) -> str:
-
     device = bart_model.device
 
     inputs = bart_tokenizer(
@@ -122,7 +119,6 @@ def summarize_with_bart(text: str, max_target_length: int = 60) -> str:
             length_penalty=1.2,
             no_repeat_ngram_size=4,
             early_stopping=True,
-            forced_bos_token_id=FORCED_BOS_TOKEN_ID,  
         )
 
     return bart_tokenizer.decode(
@@ -132,7 +128,6 @@ def summarize_with_bart(text: str, max_target_length: int = 60) -> str:
 
 
 def extract_keywords(text: str, top_n: int = 8) -> List[str]:
-
     raw = kw_model.extract_keywords(
         text,
         top_n=top_n,
@@ -143,7 +138,6 @@ def extract_keywords(text: str, top_n: int = 8) -> List[str]:
 
 
 def strip_reddit_noise(text: str) -> str:
-    
     if not text or not isinstance(text, str):
         return ""
     
@@ -168,17 +162,22 @@ def process_comment(text: str) -> CommentResult:
 
     if not cleaned:
         return CommentResult(summary="", sentiment="neutral", keywords=[])
+    
     sentiment = get_sentiment(cleaned)
     keywords = extract_keywords(cleaned) if len(cleaned) > 10 else []
 
     if len(cleaned) < SUMMARISE_MIN_LENGTH:
         summary = cleaned
     else:
-        candidate = summarize_with_bart(cleaned)
-        if len(candidate) >= len(cleaned) * SUMMARY_LENGTH_RATIO_THRESHOLD:
+        try:
+            candidate = summarize_with_bart(cleaned)
+            if len(candidate) >= len(cleaned) * SUMMARY_LENGTH_RATIO_THRESHOLD:
+                summary = cleaned
+            else:
+                summary = candidate
+        except Exception as e:
+            print(f"Summarization error: {e}")
             summary = cleaned
-        else:
-            summary = candidate
 
     return CommentResult(
         summary=summary,
