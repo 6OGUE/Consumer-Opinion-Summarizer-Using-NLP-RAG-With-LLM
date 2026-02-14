@@ -60,8 +60,6 @@ def clear_vector_db():
     if os.path.exists(METADATA_DB_PATH):
         os.remove(METADATA_DB_PATH)
 
-
-@app.post("/embed_comments")
 async def embed_comments(data: ProductComments):
     try:
         existing_vectors, existing_metadata = load_vector_db()
