@@ -7,12 +7,8 @@ from collections import defaultdict
 
 app = FastAPI()
 
-# =====================================================
-# Models
-# =====================================================
-
 class RedditRequest(BaseModel):
-    product: str                 # normalized product name (e.g. "iphone")
+    product: str                 
     max_discussions: int = 5
     comments_per_discussion: int = 5
 
@@ -21,18 +17,11 @@ class RedditResponse(BaseModel):
     count: int
     comments: List[Dict]
 
-# =====================================================
-# Config
-# =====================================================
 
 COMMENT_SEARCH_URL = "https://api.pullpush.io/reddit/comment/search"
 
 MIN_COMMENT_WORDS = 10
-FETCH_SIZE = 100   # how many comments to fetch initially
-
-# =====================================================
-# Cleaning
-# =====================================================
+FETCH_SIZE = 1   
 
 EMOJI_PATTERN = re.compile(
     "[" 
@@ -48,19 +37,12 @@ def clean_text(text: str) -> str:
     if not text:
         return ""
     text = EMOJI_PATTERN.sub("", text)
-    text = re.sub(r"^>.*$", "", text, flags=re.MULTILINE)  # remove quotes
+    text = re.sub(r"^>.*$", "", text, flags=re.MULTILINE)  
     text = re.sub(r"\s+", " ", text)
     return text.strip()
 
-# =====================================================
-# Core Logic (DISCUSSION-FIRST, RELIABLE)
-# =====================================================
 
 def fetch_comments_containing_product(product: str) -> List[Dict]:
-    """
-    Step 1: Fetch comments that explicitly mention the product.
-    This is the ONLY reliable Pushshift search.
-    """
     params = {
         "q": product,
         "size": FETCH_SIZE,
@@ -75,10 +57,6 @@ def fetch_comments_containing_product(product: str) -> List[Dict]:
         return []
 
 def group_by_discussion(comments: List[Dict]) -> Dict[str, List[Dict]]:
-    """
-    Group comments by Reddit discussion (link_id).
-    Each link_id corresponds to one discussion thread.
-    """
     grouped = defaultdict(list)
 
     for c in comments:
@@ -100,18 +78,12 @@ def extract_discussion_comments(
     max_discussions: int,
     comments_per_discussion: int
 ) -> List[Dict]:
-    """
-    Final logic:
-    1. Discover discussions via comment search
-    2. Group by discussion (link_id)
-    3. Extract top comments per discussion
-    """
     raw_comments = fetch_comments_containing_product(product)
     grouped = group_by_discussion(raw_comments)
 
     results = []
 
-    # Sort discussions by number of product-mentioning comments
+    
     sorted_discussions = sorted(
         grouped.items(),
         key=lambda x: len(x[1]),
@@ -119,7 +91,6 @@ def extract_discussion_comments(
     )
 
     for link_id, comments in sorted_discussions[:max_discussions]:
-        # Take top comments from this discussion
         for c in comments[:comments_per_discussion]:
             cleaned = clean_text(c.get("body", ""))
 
@@ -135,9 +106,6 @@ def extract_discussion_comments(
 
     return results
 
-# =====================================================
-# API
-# =====================================================
 
 @app.post("/reddit", response_model=RedditResponse)
 def reddit_endpoint(request: RedditRequest):
