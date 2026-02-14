@@ -1,6 +1,7 @@
-from fastapi import FastAPI
 from pydantic import BaseModel
 from typing import List, Dict
+from fastapi import APIRouter
+router = APIRouter()
 
 class CommentResult(BaseModel):
     summary: str
@@ -33,9 +34,7 @@ def calculate_scores(comments: ProcessingResponse) -> float:
     score = ((score + total) / (total * 2)) * 100
     return score
 
-app = FastAPI()
-
-@app.post("/calc_score", response_model=ScoreResponse)
+@router.post("/calc_score", response_model=ScoreResponse)
 def calc_score(data: ProcessingResponse):
     score = calculate_scores(data)
     return ScoreResponse(score=score)

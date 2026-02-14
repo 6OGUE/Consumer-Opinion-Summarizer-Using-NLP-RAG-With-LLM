@@ -1,23 +1,26 @@
-from fastapi import FastAPI
 from pydantic import BaseModel
 from typing import List, Dict
 import re
+import warnings
 import torch
 from transformers import BartTokenizer, BartForConditionalGeneration
+from transformers import logging
 from keybert import KeyBERT
 from transformers import pipeline as hf_pipeline
-
-app = FastAPI()
+from fastapi import APIRouter
+router = APIRouter()
 
 BART_MODEL_NAME = "facebook/bart-large-cnn"
 
+logging.set_verbosity_error()
+warnings.filterwarnings("ignore", message=".*torch_dtype.*deprecated.*")
 print("Loading BART tokenizer...")
 bart_tokenizer = BartTokenizer.from_pretrained(BART_MODEL_NAME)
 
 print("Loading BART model...")
 bart_model = BartForConditionalGeneration.from_pretrained(
     BART_MODEL_NAME,
-    torch_dtype=torch.float16 if torch.cuda.is_available() else torch.float32
+    dtype=torch.float16 if torch.cuda.is_available() else torch.float32
 ).to("cuda" if torch.cuda.is_available() else "cpu")
 bart_model.eval()
 
@@ -185,7 +188,7 @@ def process_comment(text: str) -> CommentResult:
         keywords=keywords,
     )
 
-@app.post("/process_comments", response_model=ProcessingResponse)
+@router.post("/process_comments", response_model=ProcessingResponse)
 async def clean_comments(
     reddit_data: RedditResponse,
     comment_key: str = "body",

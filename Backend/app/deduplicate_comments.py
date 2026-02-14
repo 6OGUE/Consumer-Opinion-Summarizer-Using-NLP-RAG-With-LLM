@@ -1,11 +1,12 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import HTTPException
 from pydantic import BaseModel
 from typing import List, Dict
 from sentence_transformers import SentenceTransformer
 import numpy as np
 import os
 import json
-
+from fastapi import APIRouter
+router = APIRouter()
 
 def cosine_similarity_numpy(a, b):
     """Calculate cosine similarity between vector a and matrix b"""
@@ -15,8 +16,6 @@ def cosine_similarity_numpy(a, b):
     b_norms = np.linalg.norm(b, axis=1, keepdims=True)
     b_norm = b / b_norms
     return np.dot(b_norm, a_norm)
-
-app = FastAPI()
 
 model = SentenceTransformer('all-MiniLM-L6-v2')
 
@@ -93,7 +92,7 @@ async def embed_comments(data: ProductComments):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.post("/deduplicate", response_model=DeduplicationResponse)
+@router.post("/deduplicate", response_model=DeduplicationResponse)
 async def deduplicate_comments(data: ProductComments, similarity_threshold: float = 0.70):
     try:
         await embed_comments(data)

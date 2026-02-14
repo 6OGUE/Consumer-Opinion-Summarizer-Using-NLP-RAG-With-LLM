@@ -1,11 +1,10 @@
 import requests
 import re
 from typing import List, Dict
-from fastapi import FastAPI
 from pydantic import BaseModel
 from collections import defaultdict
-
-app = FastAPI()
+from fastapi import APIRouter
+router = APIRouter()
 
 class RedditRequest(BaseModel):
     product: str                 
@@ -107,7 +106,7 @@ def extract_discussion_comments(
     return results
 
 
-@app.post("/reddit", response_model=RedditResponse)
+@router.post("/reddit", response_model=RedditResponse)
 def reddit_endpoint(request: RedditRequest):
     product = request.product.strip().lower()
 

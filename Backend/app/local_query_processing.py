@@ -1,8 +1,9 @@
 import warnings
 from gliner import GLiNER
 from typing import Optional, Tuple
-from fastapi import FastAPI
 from pydantic import BaseModel
+from fastapi import APIRouter
+router = APIRouter()
 
 #################### Cleaner terminal output #########################
 import os
@@ -25,7 +26,7 @@ def load_product_dictionary(file_path="products.txt"):
         with open(file_path, "r", encoding="utf-8") as f:
             
             PRODUCT_DICT = set(line.strip().lower() for line in f if line.strip())
-        print(f"Loaded {len(PRODUCT_DICT)} products from {file_path}")
+        print(f"Loading products from {file_path}...")
     except FileNotFoundError:
         print(f"Product dictionary file '{file_path}' not found. Continuing without dictionary.")
 
@@ -117,8 +118,6 @@ def validate_and_extract_product(query: str, threshold: float = 0.4) -> Tuple[bo
         
     return False, False, product.strip(), None
 
-app = FastAPI()
-
 class QueryRequest(BaseModel):
     query: str
     threshold: float = 0.4
@@ -129,7 +128,7 @@ class QueryResponse(BaseModel):
     suggestion: Optional[str]
     extracted: Optional[str]
 
-@app.post("/local", response_model=QueryResponse)
+@router.post("/local", response_model=QueryResponse)
 def local_process(request: QueryRequest):
     query = request.query.strip().lower()
     result, emptiness, suggestion, extracted = validate_and_extract_product(query, request.threshold)

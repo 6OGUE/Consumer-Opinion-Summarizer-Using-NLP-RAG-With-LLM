@@ -1,10 +1,12 @@
 import os
 from google import genai
 import json
-from fastapi import FastAPI, HTTPException
+from fastapi import HTTPException
 from pydantic import BaseModel
 from typing import Optional, List, Dict
 from dotenv import load_dotenv
+from fastapi import APIRouter
+router = APIRouter()
 
 load_dotenv()
 api_key = os.getenv("api_key")
@@ -68,10 +70,7 @@ Input Data:
     validated = FinalInsightResponse(**result_dict)
     return validated
 
-
-app = FastAPI()
-
-@app.post("/llm", response_model=FinalInsightResponse)
+@router.post("/llm", response_model=FinalInsightResponse)
 def llm_process(data: ProcessingResponse):
     
     try:
