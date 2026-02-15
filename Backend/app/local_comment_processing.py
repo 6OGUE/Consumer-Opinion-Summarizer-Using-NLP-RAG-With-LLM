@@ -36,39 +36,6 @@ sentiment_pipeline = hf_pipeline(
 print("Loading KeyBERT...")
 kw_model = KeyBERT()
 
-URL_PATTERN = re.compile(r'http[s]?://\S+')
-
-REDDIT_PATTERNS = [
-    re.compile(r'\[deleted\]'),
-    re.compile(r'\[removed\]'),
-    re.compile(r'u/\w+'),
-    re.compile(r'r/\w+'),
-    re.compile(r'!ping\s+\w+'),
-    re.compile(r'RemindMe!\s+.*'),
-    re.compile(r'^\s*>\s*', re.MULTILINE),
-    re.compile(r'^\s*Edit\d*:\s*', re.MULTILINE | re.IGNORECASE),
-    re.compile(r'^\s*Update:\s*', re.MULTILINE | re.IGNORECASE),
-]
-
-EMOJI_PATTERN = re.compile(
-    "["
-    u"\U0001F600-\U0001F64F"
-    u"\U0001F300-\U0001F5FF"
-    u"\U0001F680-\U0001F6FF"
-    u"\U0001F1E0-\U0001F1FF"
-    u"\U00002702-\U000027B0"
-    u"\U000024C2-\U0001F251"
-    "]+",
-    flags=re.UNICODE
-)
-
-FILLER_PHRASES = [
-    'i mean', 'you know', 'like', 'basically', 'literally', 'actually',
-    'tbh', 'imo', 'imho', 'fwiw', 'afaik', 'to be honest', 'in my opinion',
-    'honestly', 'personally', 'i think that', 'i feel like', 'it seems like',
-    'kind of', 'sort of', 'a bit', 'pretty much', 'i guess'
-]
-
 
 class RedditResponse(BaseModel):
     product: str
@@ -139,29 +106,11 @@ def extract_keywords(text: str, top_n: int = 8) -> List[str]:
     )
     return [kw for kw, _score in raw]
 
-
-def strip_reddit_noise(text: str) -> str:
-    if not text or not isinstance(text, str):
-        return ""
-    
-    text = URL_PATTERN.sub('', text)
-    for pattern in REDDIT_PATTERNS:
-        text = pattern.sub('', text)
-    text = EMOJI_PATTERN.sub('', text)
-    for phrase in FILLER_PHRASES:
-        text = re.sub(
-            r'\b' + re.escape(phrase) + r'\b',
-            '',
-            text,
-            flags=re.IGNORECASE
-        )
-    return re.sub(r'\s+', ' ', text).strip()
-
 SUMMARISE_MIN_LENGTH = 50
 SUMMARY_LENGTH_RATIO_THRESHOLD = 0.85
 
 def process_comment(text: str) -> CommentResult:
-    cleaned = strip_reddit_noise(text)
+    cleaned = text
 
     if not cleaned:
         return CommentResult(summary="", sentiment="neutral", keywords=[])

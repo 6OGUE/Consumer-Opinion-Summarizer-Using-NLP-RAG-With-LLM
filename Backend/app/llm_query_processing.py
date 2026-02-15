@@ -10,31 +10,42 @@ router = APIRouter()
 load_dotenv()
 api_key = os.getenv("api_key")
 client = genai.Client(api_key=api_key)
-def extract_product_llm(query: str): # pass query as param
+def extract_product_llm(query: str): 
     prompt = f"""
     You are an information extraction system.
-    Task:
-    - Extract a product name from the user's query.
-    - A product is a specific purchasable item (electronics, appliances, software, etc.).
-    Output rules (VERY IMPORTANT):
-    - Return ONLY valid JSON
-    - No explanations, no markdown
-    - Use exactly these fields:
-    - product_name: string or null
-    - status: boolean
-    If a product name is found:
-    {{
-    "product_name": "<product name>",
-    "status": true
-    }}
-    If no product name is found:
-    {{
-    "product_name": null,
-    "status": false
-    }}
 
-    User query:
-    "{query}"
+Task:
+- Extract the complete product name from the user's query.
+- A product is a specific purchasable item (electronics, appliances, software, hardware, accessories, etc.).
+- Return only the FULL and COMPLETE product name exactly as intended in the query.
+- If the query contains spelling mistakes, you may correct very small, obvious typos only when the intended product is clearly identifiable.
+- Do NOT make large assumptions or guess products when uncertain.
+- Do NOT return partial names. Only return the complete product name.
+- If no clear product name can be extracted, return null.
+
+Output rules (VERY IMPORTANT):
+- Return ONLY valid JSON
+- No explanations
+- No markdown
+- Use exactly these fields:
+  - product_name: string or null
+  - status: boolean
+
+If a product name is found:
+{
+  "product_name": "<complete product name>",
+  "status": true
+}
+
+If no product name is found:
+{
+  "product_name": null,
+  "status": false
+}
+
+User query:
+"{query}"
+
     """
 
     try:
