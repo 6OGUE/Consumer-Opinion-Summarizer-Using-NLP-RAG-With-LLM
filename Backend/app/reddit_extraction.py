@@ -1,12 +1,10 @@
 import requests
+import time
 from typing import List, Dict
 from pydantic import BaseModel
 from fastapi import APIRouter
+
 router = APIRouter()
-
-
-
-# ---------------- Models ----------------
 
 class RedditRequest(BaseModel):
     product: str
@@ -16,83 +14,72 @@ class RedditResponse(BaseModel):
     product: str
     count: int
     comments: List[Dict]
-    
 
-# ---------------- Config ----------------
-
-PUSHSHIFT_URL = "https://api.pullpush.io/reddit/comment/search"
-
-MIN_WORDS = 10
-MIN_SCORE = 0
-
-# ---------------- Core Logic ----------------
+SUBMISSION_SEARCH_URL = "https://api.pullpush.io/reddit/submission/search"
+COMMENT_SEARCH_URL = "https://api.pullpush.io/reddit/comment/search"
 
 def fetch_comments(product: str, limit: int) -> List[Dict]:
-    """
-    Fetch Reddit comments using Pushshift (PullPush mirror).
-    """
-
-    params = {
-        "q": product,
-        "size": limit,
-        "sort": "desc",
-        "sort_type": "created_utc",
-        "lang": "en"
-    }
-
+    all_comments = []
+    seen_bodies = set()
+    
     try:
-        response = requests.get(PUSHSHIFT_URL, params=params, timeout=20)
-        response.raise_for_status()
-        data = response.json().get("data", [])
-    except Exception as e:
-        print("Pushshift error:", e)
-        return []
+        thread_res = requests.get(SUBMISSION_SEARCH_URL, params={
+            "q": f"{product} review",
+            "size": 5,
+            "sort": "desc",
+            "sort_type": "score"
+        }, timeout=10)
+        thread_ids = [f"t3_{item['id']}" for item in thread_res.json().get("data", []) if "id" in item]
+    except:
+        thread_ids = []
 
-    comments = []
-    seen_ids = set()
-
-    for item in data:
-        body = item.get("body")
-        if not body:
+    for tid in thread_ids:
+        try:
+            res = requests.get(COMMENT_SEARCH_URL, params={"link_id": tid, "size": 40}, timeout=10)
+            if res.status_code == 200:
+                for item in res.json().get("data", []):
+                    body = item.get("body", "").strip()
+                    
+                    if (len(body.split()) > 10 and 
+                        body not in seen_bodies and 
+                        "fakespot" not in body.lower()):
+                        all_comments.append({"body": body})
+                        seen_bodies.add(body)
+            time.sleep(0.1) 
+        except:
             continue
 
-        body = body.strip()
+    if len(all_comments) < 10:
+        try:
+            res = requests.get(COMMENT_SEARCH_URL, params={
+                "q": f'"{product}" review',
+                "size": limit,
+                "sort": "desc"
+            }, timeout=10)
+            if res.status_code == 200:
+                for item in res.json().get("data", []):
+                    body = item.get("body", "").strip()
+                    if (len(body.split()) > 15 and 
+                        body not in seen_bodies and 
+                        "fakespot" not in body.lower()):
+                        all_comments.append({"body": body})
+                        seen_bodies.add(body)
+        except:
+            pass
 
-        if body.lower() in ["[deleted]", "[removed]"]:
-            continue
-
-        if len(body.split()) < MIN_WORDS:
-            continue
-
-        score = item.get("score", 0)
-        if score < MIN_SCORE:
-            continue
-
-        cid = item.get("id")
-        if not cid or cid in seen_ids:
-            continue
-
-        seen_ids.add(cid)
-
-        comments.append({
-            "body": body,
-        })
-
-    return comments
-
-# ---------------- API ----------------
+    return all_comments[:limit]
 
 @router.post("/reddit", response_model=RedditResponse)
 def reddit_endpoint(request: RedditRequest):
-    product = request.product.strip().lower()
+    product_query = request.product.strip()
+    
+    if not product_query or product_query.lower() == "string":
+        return RedditResponse(product=product_query, count=0, comments=[])
 
-    if not product:
-        return RedditResponse(product=product, count=0, comments=[])
-
-    comments = fetch_comments(product, request.limit)
-
+    comments_list = fetch_comments(product_query, request.limit)
+    
     return RedditResponse(
-        product=product,
-        count=len(comments),
-        comments=comments
+        product=product_query,
+        count=len(comments_list),
+        comments=comments_list
     )
