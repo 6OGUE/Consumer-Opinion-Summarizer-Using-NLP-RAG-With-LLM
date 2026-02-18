@@ -6,6 +6,7 @@ from app.llm_query_processing import router as llm_query_router
 from app.final_llm_call import router as final_llm_router
 from app.score_calculate import router as score_router
 from app.deduplicate_comments import router as deduplicate_router
+from app.capture_semantics import router as capture_router
 
 app = FastAPI()
 
@@ -16,3 +17,4 @@ app.include_router(llm_query_router, prefix="/llm-query")
 app.include_router(final_llm_router, prefix="/llm-call")
 app.include_router(score_router, prefix="/score")
 app.include_router(deduplicate_router, prefix="/deduplicate")
+app.include_router(capture_router, prefix="/capture-semantics")

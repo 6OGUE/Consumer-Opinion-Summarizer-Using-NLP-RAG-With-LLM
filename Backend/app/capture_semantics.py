@@ -1,14 +1,10 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException,APIRouter
 from pydantic import BaseModel
 from typing import List, Dict
 import requests
 import json
 
-app = FastAPI()
-
-OLLAMA_URL = "http://localhost:11434/api/generate"
-MODEL_NAME = "llama3.2:3b"
-
+router=APIRouter()
 
 class DeduplicationResponse(BaseModel):
     product: str
@@ -34,32 +30,16 @@ RELEVANT comment:
 - Mentions the product directly, OR
 - Mentions features of the product.
 
-IRRELEVANT comment:
-- Crypto, movies, memes, jokes, reactions, emojis only
-- Spam, ads, links
-- Generic text unrelated to the product
-- Emoji-only comments
-- Comments with no semantic meaning
-- Comments that become empty after cleaning
-
-INVALID CHARACTERS:
-Remove:
-- emojis
-- broken unicode
-- symbols like @#$%^&*/
-- URLs
-- excessive punctuation
 
 OUTPUT RULES (STRICT):
 
-1. Keep ONLY relevant comments
+1. STRICTLY Keep ONLY the semantic meaning relevant comments, Discard everything else
 2. Clean invalid characters
-3. Extract only semantic meaning with keywords
+3. Extract only semantic meaning preserving keywords
 4. Each comment must contain meaningful product-related information
 5. DISCARD comments that become empty after cleaning
 6. DO NOT include author names
-7. DO NOT include empty comments
-8. DO NOT include irrelevant comments
+7. DO NOT include irrelevant comments
 
 OUTPUT FORMAT (STRICT JSON ONLY):
 
@@ -102,7 +82,7 @@ def call_ollama(prompt: str) -> dict:
         raise HTTPException(status_code=500, detail="Invalid JSON from model")
 
 
-@app.post("/process", response_model=RedditResponse)
+@router.post("/process", response_model=RedditResponse)
 def process_data(data: DeduplicationResponse):
 
     prompt = build_prompt(data)
