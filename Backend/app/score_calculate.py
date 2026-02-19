@@ -1,38 +1,39 @@
+from fastapi import FastAPI,APIRouter
 from pydantic import BaseModel
 from typing import List, Dict
-from fastapi import APIRouter
+
 router = APIRouter()
 
 class CommentResult(BaseModel):
     summary: str
-    sentiment: str          
+    sentiment: str
     keywords: List[str]
+
 
 class ProcessingResponse(BaseModel):
     product: str
     count: int
     comments: Dict[int, CommentResult]
 
+
 class ScoreResponse(BaseModel):
     score: float
 
-def calculate_scores(comments: ProcessingResponse) -> float:
+
+def calculate_scores(data: ProcessingResponse) -> float:
     score = 0
-    total = 0
+    total = len(data.comments)
 
-    for comment in comments.comments.values():
-        total += 1
-
+    for comment in data.comments.values():
         if comment.sentiment == "positive":
             score += 1
         elif comment.sentiment == "negative":
             score -= 1
 
     if total == 0:
-        return 0
+        return 0.0
 
-    score = ((score + total) / (total * 2)) * 100
-    return score
+    return ((score + total) / (total * 2)) * 100
 
 @router.post("/calc_score", response_model=ScoreResponse)
 def calc_score(data: ProcessingResponse):

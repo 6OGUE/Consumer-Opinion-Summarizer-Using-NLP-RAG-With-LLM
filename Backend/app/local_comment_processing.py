@@ -140,7 +140,7 @@ def process_comment(text: str) -> CommentResult:
 @router.post("/process_comments", response_model=ProcessingResponse)
 async def clean_comments(
     reddit_data: RedditResponse,
-    comment_key: str = "body",
+    comment_key: str = "comment",
 ):
     results: Dict[int, CommentResult] = {}
 

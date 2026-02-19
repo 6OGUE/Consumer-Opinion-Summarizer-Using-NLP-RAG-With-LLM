@@ -6,6 +6,9 @@ import json
 
 router=APIRouter()
 
+OLLAMA_URL = "http://localhost:11434/api/generate"
+MODEL_NAME = "llama3.2:3b"
+
 class DeduplicationResponse(BaseModel):
     product: str
     count: int
@@ -33,15 +36,9 @@ RELEVANT comment:
 
 OUTPUT RULES (STRICT):
 
-1. STRICTLY Keep ONLY the semantic meaning relevant comments, Discard everything else
-2. Clean invalid characters
-3. Extract only semantic meaning preserving keywords
-4. Each comment must contain meaningful product-related information
-5. DISCARD comments that become empty after cleaning
-6. DO NOT include author names
-7. DO NOT include irrelevant comments
+1. STRICTLY RETURN ONLY the semantic meaning relevant comments, Discard everything else
 
-OUTPUT FORMAT (STRICT JSON ONLY):
+OUTPUT FORMAT (VERY STRICT JSON ONLY):
 
 {{
   "product": string,
@@ -51,7 +48,7 @@ OUTPUT FORMAT (STRICT JSON ONLY):
   ]
 }}
 
-Return ONLY valid JSON. No explanation.
+Return ONLY valid JSON. NOTHING ELSE.
 Input data:
 Product: {data.product}
 Count: {data.count}

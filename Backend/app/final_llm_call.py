@@ -38,23 +38,23 @@ def final_llm_call(data: ProcessingResponse) -> FinalInsightResponse:
     input_json = data.model_dump_json(indent=2)
 
     prompt = f"""
-You are an opinion summarization system.
+    You are an opinion summarization system.
 
-Task: Analyze the following ProcessingResponse JSON and create summarized insights.
+    Task: Analyze the following ProcessingResponse JSON and create summarized insights.
 
-Return ONLY valid JSON matching this exact schema:
-{{
-  "overview": "string - brief product summary",
-  "unique_features": ["string array - unique product features"],
-  "strengths": ["string array - positive aspects - from the comments only"],
-  "weaknesses": ["string array - negative aspects - from the comments only"],  
-  "alternatives": ["string array - alternative product names"],
-  "final_insight": "string - conclusion based on the analysis"
-}}
+    Return ONLY valid JSON matching this exact schema:
+    {{
+    "overview": "string - brief product summary",
+    "unique_features": ["string array - unique product features"],
+    "strengths": ["string array - positive aspects - from the comments only"],
+    "weaknesses": ["string array - negative aspects - from the comments only"],  
+    "alternatives": ["string array - alternative product names"],
+    "final_insight": "string - conclusion based on the analysis"
+    }}
 
-CRITICAL: Base all points strictly on the provided comments, keywords and sentiments. No assumptions except for the alternatives content.
+    CRITICAL: Base all points strictly on the provided comments, keywords and sentiments. No assumptions except for the alternatives content.
 
-Input Data:
+    Input Data:
 {input_json}
 """
     
