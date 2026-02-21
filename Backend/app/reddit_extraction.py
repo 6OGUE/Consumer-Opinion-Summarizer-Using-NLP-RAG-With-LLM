@@ -1,8 +1,8 @@
+import json
 import requests
-import time
-from typing import List, Dict
+from typing import Dict, List
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
-from fastapi import APIRouter
 
 router = APIRouter()
 
@@ -15,71 +15,65 @@ class RedditResponse(BaseModel):
     count: int
     comments: List[Dict]
 
-SUBMISSION_SEARCH_URL = "https://api.pullpush.io/reddit/submission/search"
-COMMENT_SEARCH_URL = "https://api.pullpush.io/reddit/comment/search"
+HEADERS = {
+    "User-Agent": "python:reddit.scraper:v1.0 (by /u/yourusername)"
+}
 
-def fetch_comments(product: str, limit: int) -> List[Dict]:
-    all_comments = []
-    seen_bodies = set()
-    
-    try:
-        thread_res = requests.get(SUBMISSION_SEARCH_URL, params={
-            "q": f"{product} review",
-            "size": 5,
-            "sort": "desc",
-            "sort_type": "score"
-        }, timeout=10)
-        thread_ids = [f"t3_{item['id']}" for item in thread_res.json().get("data", []) if "id" in item]
-    except:
-        thread_ids = []
+@router.post("/scrape-reddit", response_model=RedditResponse)
+def scrape_reddit(request: RedditRequest):
 
-    for tid in thread_ids:
-        try:
-            res = requests.get(COMMENT_SEARCH_URL, params={"link_id": tid, "size": 40}, timeout=10)
-            if res.status_code == 200:
-                for item in res.json().get("data", []):
-                    body = item.get("body", "").strip()
-                    
-                    if (len(body.split()) > 10 and 
-                        body not in seen_bodies and 
-                        "fakespot" not in body.lower()):
-                        all_comments.append({"body": body})
-                        seen_bodies.add(body)
-            time.sleep(0.1) 
-        except:
-            continue
+    search_url = "https://old.reddit.com/search.json"
+    params = {
+        "q": f"{request.product} review",
+        "type": "link",
+        "sort": "relevance",
+        "limit": 5,
+    }
+    search_response = requests.get(search_url, headers=HEADERS, params=params)
+    if search_response.status_code != 200:
+        raise HTTPException(
+            status_code=502,
+            detail=f"Reddit search failed with status {search_response.status_code}",
+        )
 
-    if len(all_comments) < 10:
-        try:
-            res = requests.get(COMMENT_SEARCH_URL, params={
-                "q": f'"{product}" review',
-                "size": limit,
-                "sort": "desc"
-            }, timeout=10)
-            if res.status_code == 200:
-                for item in res.json().get("data", []):
-                    body = item.get("body", "").strip()
-                    if (len(body.split()) > 15 and 
-                        body not in seen_bodies and 
-                        "fakespot" not in body.lower()):
-                        all_comments.append({"body": body})
-                        seen_bodies.add(body)
-        except:
-            pass
+    search_data = search_response.json()
 
-    return all_comments[:limit]
+    threads = search_data["data"]["children"]
 
-@router.post("/reddit", response_model=RedditResponse)
-def reddit_endpoint(request: RedditRequest):
-    product_query = request.product.strip()
-    
-    if not product_query or product_query.lower() == "string":
-        return RedditResponse(product=product_query, count=0, comments=[])
+    if not threads:
+        raise HTTPException(status_code=404, detail="No threads found for the given product")
 
-    comments_list = fetch_comments(product_query, request.limit)
-    
-    return RedditResponse(
-        product=product_query,
-        count=len(comments_list),
-        comments=comments_list
+    thread = threads[0]["data"]
+    thread_url = "https://old.reddit.com" + thread["permalink"]
+
+    thread_json_url = thread_url.rstrip("/") + ".json"
+    thread_response = requests.get(thread_json_url, headers=HEADERS)
+    if thread_response.status_code != 200:
+        raise HTTPException(status_code=502, detail="Failed to fetch thread data from Reddit")
+
+    thread_data = thread_response.json()
+
+    comments_raw = thread_data[1]["data"]["children"]
+
+    comments = []
+    for comment in comments_raw:
+        if comment["kind"] == "t1":
+            comment_data = comment["data"]
+            comments.append(
+                {
+                    "comment": comment_data.get("body"),
+                }
+            )
+            if len(comments) >= request.limit:
+                break
+
+    result = RedditResponse(
+        product=request.product,
+        count=len(comments),
+        comments=comments,
     )
+
+    with open("reddit_data.json", "w", encoding="utf-8") as f:
+        json.dump(result.model_dump(), f, indent=4, ensure_ascii=False)
+
+    return result

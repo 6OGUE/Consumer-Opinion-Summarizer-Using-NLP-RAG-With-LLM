@@ -6,9 +6,9 @@ import requests
 
 from typing import Optional, Tuple
 from pydantic import BaseModel
-from fastapi import APIRouter, FastAPI
+from fastapi import APIRouter
 
-app = FastAPI()
+router = APIRouter()
 
 #################### Cleaner terminal output #########################
 os.environ['HF_HUB_DISABLE_PROGRESS_BARS'] = '1'
@@ -157,7 +157,7 @@ class QueryResponse(BaseModel):
     suggestions: Optional[str]
 
 
-@app.post("/local", response_model=QueryResponse)
+@router.post("/local", response_model=QueryResponse)
 def local_process(request: QueryRequest):
     query = request.query.strip().lower()
     extracted, suggestions = validate_and_extract_product(query)
