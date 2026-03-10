@@ -52,7 +52,7 @@ def final_llm_call(data: ProcessingResponse) -> FinalInsightResponse:
     "final_insight": "string - conclusion based on the analysis"
     }}
 
-    CRITICAL: Base all points strictly on the provided comments, keywords and sentiments. No assumptions except for the alternatives content.
+    CRITICAL: Base all points strictly on the provided comments, keywords and sentiments. No assumptions.
 
     Input Data:
 {input_json}
