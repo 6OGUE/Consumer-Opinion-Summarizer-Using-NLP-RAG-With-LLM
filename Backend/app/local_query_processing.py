@@ -41,43 +41,66 @@ MODEL_NAME = "llama3.2:3b"
 
 def extract_product_llm(query: str) -> Tuple[Optional[str], Optional[str]]:
     prompt = f"""
-    You are a product name extraction system.
+    You are a strict product name extraction system.
 
     Your task:
-    Analyze the user's query and compare it against known product names.
+    Extract product names only if a specific commercial product model appears in the user query.
 
     Rules:
-    1. Only extract COMPLETE product names exactly as they exist.
-    2. If the query contains spelling mistakes, you may correct very small, obvious typos only when the intended product is clearly identifiable.
-    2. Confidence levels:
+
+    1. Only return real product names that represent a specific commercial product model.
+
+    2. Never return generic phrases, categories, product types, or descriptive phrases.
+
+    3. A product name must explicitly appear in the query text.
+
+    4. Do not infer or guess products from categories or context.
+
+    5. Suggestions are allowed ONLY if the query contains part of an identifiable product name such as a brand or model token.
+    If the query contains only generic category words, suggestions must be null.
+
+    6. If no explicit product name or identifiable product token exists in the query, return null for both fields.
+
+    7. Small typo correction is allowed only when the intended product is clearly identifiable.
+
+    8. Confidence levels:
 
     FULL MATCH (100% certain):
-    - The query clearly refers to one exact product.
-    - Return that complete product name in "extracted".
-    - Set "suggestions" to null.
 
-    PARTIAL MATCH (uncertain or incomplete reference):
-    - The query partially matches or could refer to a known product but is not exact or fully clear.
-    - Return the complete product name in "suggestions".
-    - Set "extracted" to null.
+    * The exact product name appears in the query.
+    * Return that name in "extracted".
+    * Set "suggestions" to null.
+
+    PARTIAL MATCH:
+
+    * The query contains part of a real product name but not the full model name.
+    * Return the complete product name in "suggestions".
+    * Set "extracted" to null.
 
     NO MATCH:
-    - If no product can be confidently or partially identified,
-    - Return both fields as null.
 
-    3. Never return both fields filled.
-    4. Never explain anything.
-    5. Never guess.
+    * If the query contains only generic product categories or unrelated text.
+    * Return both fields as null.
+
+    9. Suggestions must always be a single valid product model name.
+
+    10. Before returning output, verify that the returned value is a specific product model name.
+    If it is not a specific product model name, return null.
+
+    11. Never return both fields filled.
+
+    12. Never explain anything.
+
+    13. Never guess or generate product names that are not explicitly supported by the query.
 
     Output format (STRICT JSON ONLY):
 
-    {{
+    {
     "extracted": string | null,
     "suggestions": string | null
-    }}
+    }
 
-    User query:
-    "{query}"
+    User query: "{query}"
     """
     try:
         response = requests.post(
