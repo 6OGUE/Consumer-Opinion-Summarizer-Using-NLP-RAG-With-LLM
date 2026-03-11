@@ -1,11 +1,10 @@
 import json
 import requests
 from typing import Dict, List
-from fastapi import APIRouter, HTTPException, FastAPI
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-#router = APIRouter()
-app=FastAPI()
+router = APIRouter()
 class RedditRequest(BaseModel):
     product: str
     limit: int = 100
@@ -20,7 +19,7 @@ HEADERS = {
     "User-Agent": "python:reddit.scraper:v1.0 (by /u/yourusername)"
 }
 
-@app.post("/scrape-reddit", response_model=RedditResponse)
+@router.post("/scrape-reddit", response_model=RedditResponse)
 def scrape_reddit(request: RedditRequest):
 
     search_url = "https://old.reddit.com/search.json"
