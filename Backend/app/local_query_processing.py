@@ -9,7 +9,6 @@ from pydantic import BaseModel
 from fastapi import APIRouter
 
 router = APIRouter()
-
 #################### Cleaner terminal output #########################
 os.environ['HF_HUB_DISABLE_PROGRESS_BARS'] = '1'
 os.environ['TRANSFORMERS_VERBOSITY'] = 'error'
@@ -39,66 +38,47 @@ OLLAMA_URL = "http://localhost:11434/api/generate"
 MODEL_NAME = "llama3.2:3b"
 
 
-def extract_product_llm(query: str) -> Tuple[Optional[str], Optional[str]]:
+def extract_product_llm(query: str) -> Optional[str]:
     prompt = f"""
     You are a strict product name extraction system.
 
     Your task:
-    Extract product names only if a specific commercial product model appears in the user query.
+    Extract a specific product name from the user query, or return null if no specific product can be confidently identified.
 
     Rules:
 
-    1. Only return real product names that represent a specific commercial product model.
+    1. SPECIFIC PRODUCT ONLY:
+       A valid extracted value must be a specific, real-world commercial product model.
+       It must have enough identifiers to distinguish it from other products.
+       Vague or incomplete references do not qualify.
 
-    2. Never return generic phrases, categories, product types, or descriptive phrases.
+    2. TYPO CORRECTION:
+       If the query contains misspellings but the intended product is unambiguously identifiable,
+       return the correctly spelled product name.
+       If the typos are too severe to confidently identify the product, return null.
 
-    3. A product name must explicitly appear in the query text.
+    3. NEVER RETURN GENERIC TERMS:
+       Do not return product categories, types, adjectives, or descriptive phrases.
+       A product name is NOT valid if it could describe a broad class of items rather than one specific model.
 
-    4. Do not infer or guess products from categories or context.
+    4. CONFIDENCE REQUIREMENT:
+       Only return a value if you are confident it refers to one specific product.
+       If the query is ambiguous, incomplete, or could refer to multiple different products, return null.
 
-    5. Suggestions are allowed ONLY if the query contains part of an identifiable product name such as a brand or model token.
-    If the query contains only generic category words, suggestions must be null.
+    5. NO INVENTION:
+       Never generate, guess, or construct a product name that is not clearly supported by the query text.
+       The returned name must be traceable back to tokens present in the query.
 
-    6. If no explicit product name or identifiable product token exists in the query, return null for both fields.
+    6. CORRECTNESS OVER COMPLETENESS:
+       It is better to return null than to return a wrong, generic, or uncertain value.
 
-    7. Small typo correction is allowed only when the intended product is clearly identifiable.
-
-    8. Confidence levels:
-
-    FULL MATCH (100% certain):
-
-    * The exact product name appears in the query.
-    * Return that name in "extracted".
-    * Set "suggestions" to null.
-
-    PARTIAL MATCH:
-
-    * The query contains part of a real product name but not the full model name.
-    * Return the complete product name in "suggestions".
-    * Set "extracted" to null.
-
-    NO MATCH:
-
-    * If the query contains only generic product categories or unrelated text.
-    * Return both fields as null.
-
-    9. Suggestions must always be a single valid product model name.
-
-    10. Before returning output, verify that the returned value is a specific product model name.
-    If it is not a specific product model name, return null.
-
-    11. Never return both fields filled.
-
-    12. Never explain anything.
-
-    13. Never guess or generate product names that are not explicitly supported by the query.
+    7. Never explain anything.
 
     Output format (STRICT JSON ONLY):
 
-    {
-    "extracted": string | null,
-    "suggestions": string | null
-    }
+    {{
+    "extracted": string | null
+    }}
 
     User query: "{query}"
     """
@@ -118,57 +98,39 @@ def extract_product_llm(query: str) -> Tuple[Optional[str], Optional[str]]:
         result_dict = json.loads(data.get("response", "{}"))
 
         extracted = result_dict.get("extracted")
-        suggestions = result_dict.get("suggestions")
-
         extracted = extracted.strip().lower() if extracted else None
-        suggestions = suggestions.strip().lower() if suggestions else None
 
-        return extracted, suggestions
+        return extracted
 
     except Exception as e:
         print(f"LLM Error: {e}")
-        return None, None
+        return None
 
 
-def extract_product_dict(query: str) -> Tuple[Optional[str], Optional[str]]:
+def extract_product_dict(query: str) -> Optional[str]:
     if not query:
-        return None, None
+        return None
 
     normalized_query = query.strip().lower()
 
-    if normalized_query in PRODUCT_DICT:
-        return normalized_query, None
+    for item in PRODUCT_DICT:
+        if item==normalized_query:
+            return item
 
-    
-    for product in PRODUCT_DICT:
-        if normalized_query in product:
-            return None, product
-
-    
-    best_match = None
-    for product in PRODUCT_DICT:
-        if product in normalized_query:
-            if best_match is None or len(product) > len(best_match):
-                best_match = product
-
-    if best_match:
-        return None, best_match
-
-    return None, None
+    return None
 
 
-def validate_and_extract_product(query: str) -> Tuple[Optional[str], Optional[str]]:
+def validate_and_extract_product(query: str) -> Optional[str]:
     if not query or not query.strip():
-        return None, None
+        return None
 
-    
-    extracted, suggestions = extract_product_dict(query)
+    extracted = extract_product_dict(query)
 
-    if extracted is not None or suggestions is not None:
-        return extracted, suggestions
+    if extracted is not None:
+        return extracted
 
-    extracted, suggestions = extract_product_llm(query)
-    return extracted, suggestions
+    extracted = extract_product_llm(query)
+    return extracted
 
 
 class QueryRequest(BaseModel):
@@ -177,15 +139,11 @@ class QueryRequest(BaseModel):
 
 class QueryResponse(BaseModel):
     extracted: Optional[str]
-    suggestions: Optional[str]
 
 
 @router.post("/local", response_model=QueryResponse)
 def local_process(request: QueryRequest):
     query = request.query.strip().lower()
-    extracted, suggestions = validate_and_extract_product(query)
+    extracted = validate_and_extract_product(query)
 
-    return QueryResponse(
-        extracted=extracted,
-        suggestions=suggestions
-    )
+    return QueryResponse(extracted=extracted)

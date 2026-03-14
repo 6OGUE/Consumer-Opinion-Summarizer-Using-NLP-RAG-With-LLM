@@ -28,26 +28,21 @@ Output rules (VERY IMPORTANT):
 - No explanations
 - No markdown
 - Use exactly these fields:
-  - product_name: string or null
-  - status: boolean
+  - extracted: string or null
 
 If a product name is found:
-{
-  "product_name": "<complete product name>",
-  "status": true
-}
+{{
+  "extracted": "<complete product name>"
+}}
 
 If no product name is found:
-{
-  "product_name": null,
-  "status": false
-}
+{{
+  "extracted": null
+}}
 
 User query:
 "{query}"
-
     """
-
     try:
         response = client.models.generate_content(
         model="gemini-2.5-flash-lite", 
@@ -58,25 +53,23 @@ User query:
         "response_mime_type": "application/json"
         })
         result_dict = json.loads(response.text)
-        return result_dict.get("product_name"), result_dict.get("status", False)
+        return result_dict.get("extracted")
 
     except Exception as e:
         print(f"LLM Error: {e}")
-        return None, False
+        return None
 
 class QueryRequest(BaseModel):
     query: str
 class QueryResponse(BaseModel):
-    result: bool
-    extracted: Optional[str]
+    extracted:Optional[str]
 
 
 @router.post("/llm", response_model=QueryResponse)
 def llm_process(request: QueryRequest):
     query = request.query.strip().lower()
-    extracted, result = extract_product_llm(query)
+    extracted = extract_product_llm(query)
     
     return QueryResponse(
-        result=result,
         extracted=extracted
     )
