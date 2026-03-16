@@ -8,6 +8,7 @@ from app.capture_semantics import router as cleanup_comments
 from app.local_comment_processing import router as process_comments
 from app.score_calculate import router as score_finder
 from app.final_llm_call import router as final_call
+from app.chatbot import router as chatbot
 
 app = FastAPI()
 
@@ -22,8 +23,10 @@ app.include_router(remove_duplicates, prefix="/remove_duplicates", tags=["Remove
 # Step 4
 app.include_router(cleanup_comments, prefix="/cleanup_comments", tags=["Cleanup Comments"])
 # Step 5
-app.include_router(process_comments, prefix="/process_comments", tags=["Process Comments"])
+app.include_router(chatbot, prefix="/chatbot", tags=["Chatbot"])
 # Step 6
-app.include_router(score_finder, prefix="/score_finder", tags=["Score Finder"])
+app.include_router(process_comments, prefix="/process_comments", tags=["Process Comments"])
 # Step 7
+app.include_router(score_finder, prefix="/score_finder", tags=["Score Finder"])
+# Step 8
 app.include_router(final_call, prefix="/final_call", tags=["Final Call"])
