@@ -3,6 +3,7 @@ import os
 import logging
 import json
 import requests
+import re
 
 from typing import Optional, Tuple
 from pydantic import BaseModel
@@ -112,13 +113,17 @@ def extract_product_dict(query: str) -> Optional[str]:
         return None
 
     normalized_query = query.strip().lower()
+    for item in sorted(PRODUCT_DICT, key=lambda x: len(x), reverse=True):
+        item_lower = item.lower()
 
-    for item in PRODUCT_DICT:
-        if item==normalized_query:
+        if item_lower == normalized_query:
+            return item
+
+        pattern = r'(?<!\w)' + re.escape(item_lower) + r'(?!\w)'
+        if re.search(pattern, normalized_query):
             return item
 
     return None
-
 
 def validate_and_extract_product(query: str) -> Optional[str]:
     if not query or not query.strip():
