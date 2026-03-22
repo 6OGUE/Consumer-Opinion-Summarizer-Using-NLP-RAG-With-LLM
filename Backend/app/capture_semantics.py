@@ -2,24 +2,50 @@ from fastapi import HTTPException, APIRouter
 from pydantic import BaseModel
 from typing import List, Dict
 import re
-import numpy as np
-from sentence_transformers import SentenceTransformer
-from sklearn.metrics.pairwise import cosine_similarity
+import json
+import asyncio
+from concurrent.futures import ThreadPoolExecutor
+import requests
 
 router = APIRouter()
-_model: SentenceTransformer | None = None
 
+OLLAMA_URL = "http://localhost:11434/api/generate"
+OLLAMA_MODEL = "llama3.2:3b"
 
-def get_model() -> SentenceTransformer:
-    global _model
-    if _model is None:
-        _model = SentenceTransformer("all-MiniLM-L6-v2")
-    return _model
+ONE_SHOT_PROMPT = """Your job is to classify Reddit comments about a product as either "review" or "not review".
+
+A "review" is any comment where the user shares their personal experience, opinion, or assessment of a product — even briefly. This includes short opinions, complaints, praise, comparisons, or recommendations.
+A "not review" is a comment that is a question, joke, meme, off-topic discussion, or contains no personal product experience.
+
+Respond ONLY in this exact JSON format, no other text:
+{{"classification": "review"}}
+or
+{{"classification": "not review"}}
+
+Examples:
+Comment: "I've been using this blender for 3 months. Super powerful and quiet, but the lid leaks occasionally."
+Response: {{"classification": "review"}}
+
+Comment: "Does anyone know if this works with 220V?"
+Response: {{"classification": "not review"}}
+
+Comment: "Bought this last week. Honestly not impressed, feels cheap."
+Response: {{"classification": "review"}}
+
+Comment: "Lol same, this subreddit is wild"
+Response: {{"classification": "not review"}}
+
+Now classify this comment:
+Comment: "{comment}"
+Response:"""
+
+_executor = ThreadPoolExecutor(max_workers=1)
+
 
 class DeduplicationResponse(BaseModel):
     product: str
     count: int
-    comments: List[Dict[str, str]]
+    comments: List[Dict]
 
 
 class RedditResponse(BaseModel):
@@ -27,8 +53,8 @@ class RedditResponse(BaseModel):
     count: int
     comments: List[Dict]
 
-def clean_text(text: str) -> str:
 
+def clean_text(text: str) -> str:
     if not isinstance(text, str):
         return ""
 
@@ -42,97 +68,83 @@ def clean_text(text: str) -> str:
     text = re.sub(r"_{1,2}(.+?)_{1,2}", r"\1", text, flags=re.DOTALL)
     text = re.sub(r"`{1,3}[\s\S]*?`{1,3}", "", text)
     text = re.sub(r"#+\s*", "", text)
-    text = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", text)   
-    text = re.sub(r"https?://\S+", "", text)               
-    text = re.sub(r"(?m)^-{3,}$", "", text)                 
+    text = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", text)
+    text = re.sub(r"https?://\S+", "", text)
+    text = re.sub(r"(?m)^-{3,}$", "", text)
     text = re.sub(r"&amp;", "&", text)
     text = re.sub(r"&lt;", "<", text)
     text = re.sub(r"&gt;", ">", text)
-    text = re.sub(r"&quot;|&#34;", "", text)
+    text = re.sub(r"&quot;|&#34;", '"', text)
     text = re.sub(r"&#?\w+;", " ", text)
-    text = re.sub(r'[\"\'`\*#\[\](){}<>|\\^~@$%]', " ", text)
-    text = re.sub(r"([!?.]){2,}", r"\1", text)
     text = re.sub(r"[\x00-\x1f\x7f-\x9f]", " ", text)
     text = re.sub(r"\s+", " ", text).strip()
     return text if len(text) >= 5 else ""
 
-_ANCHOR_TEMPLATES = [
-    "I bought {product} and here is my honest review.",
-    "My experience using {product} has been good and bad in these ways.",
 
-    "{product} performs well in these areas and struggles in these areas.",
-    "The build quality and design of {product} is impressive or disappointing.",
-    "Battery life, speed, and reliability of {product} compared to expectations.",
+def _call_ollama_sync(comment_text: str) -> Dict | None:
+    """Blocking Ollama call using requests — runs inside a thread."""
+    safe_comment = comment_text.replace('"', "'").replace("\n", " ").strip()
+    prompt = ONE_SHOT_PROMPT.format(comment=safe_comment)
 
-    "I would recommend {product} to others for these reasons.",
-    "I would not recommend {product} because of these problems.",
-    "{product} is worth buying or not worth buying at this price.",
+    payload = {
+        "model": OLLAMA_MODEL,
+        "prompt": prompt,
+        "stream": False,
+        "options": {
+            "temperature": 0.0,
+            "num_predict": 30,
+        },
+    }
 
-    "{product} is better or worse than its competitors in these ways.",
-    "Compared to similar products, {product} stands out or falls short.",
+    try:
+        resp = requests.post(OLLAMA_URL, json=payload, timeout=30)
+        resp.raise_for_status()
+        raw = resp.json().get("response", "").strip()
 
-    "The biggest problem I have with {product} is this specific issue.",
-    "The best thing about {product} is this specific feature or aspect.",
-    "Customer support and after-sales experience with {product}.",
+        json_match = re.search(r'\{.*?\}', raw, re.DOTALL)
+        if not json_match:
+            return None
 
-    "{product} is great for this type of person or this use case.",
-    "{product} is not suitable for this type of person or this use case.",
-]
+        return json.loads(json_match.group())
+
+    except Exception:
+        return None
 
 
-def build_query_embedding(product: str, model: SentenceTransformer) -> np.ndarray:
+async def classify_comment_with_ollama(comment_text: str) -> Dict | None:
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(_executor, _call_ollama_sync, comment_text)
 
-    anchors = [t.format(product=product) for t in _ANCHOR_TEMPLATES]
-    anchor_embeddings = model.encode(anchors, normalize_embeddings=True, show_progress_bar=False)
-    mean_vec = anchor_embeddings.mean(axis=0)
-    norm = np.linalg.norm(mean_vec)
-    return (mean_vec / norm).reshape(1, -1)  
+
+async def process_comment(comment: Dict) -> Dict | None:
+    body_keys = ("body", "text", "comment", "content")
+    body_key = next((k for k in body_keys if k in comment), None)
+    raw_body = str(comment.get(body_key, "")) if body_key else ""
+
+    # Use light clean for classification to preserve context
+    cleaned_body = clean_text(raw_body)
+
+    if not cleaned_body:
+        return None
+
+    result = await classify_comment_with_ollama(cleaned_body)
+
+    if result is None or result.get("classification", "").lower() != "review":
+        return None
+
+    return comment
+
 
 @router.post("/filter-comments", response_model=DeduplicationResponse)
-async def filter_comments(payload: RedditResponse, threshold: float = 0.5):
+async def filter_comments(payload: RedditResponse):
     if not payload.product.strip():
         raise HTTPException(status_code=400, detail="Product name must not be empty.")
 
     if not payload.comments:
         raise HTTPException(status_code=400, detail="No comments provided.")
 
-    model = get_model()
-    query_emb = build_query_embedding(payload.product.strip(), model)
-
-    body_keys = ("body", "text", "comment", "content")
-    cleaned_meta: List[Dict[str, str]] = []
-    texts_to_embed: List[str] = []
-
-    for comment in payload.comments:
-        body_key = next((k for k in body_keys if k in comment), None)
-        raw_body = str(comment.get(body_key, "")) if body_key else ""
-        cleaned_body = clean_text(raw_body)
-
-        if not cleaned_body:
-            continue
-
-        cleaned = {k: clean_text(str(v)) for k, v in comment.items()}
-        cleaned[body_key or "body"] = cleaned_body
-
-        texts_to_embed.append(cleaned_body)
-        cleaned_meta.append(cleaned)
-
-    if not texts_to_embed:
-        return DeduplicationResponse(product=payload.product, count=0, comments=[])
-
-    comment_embeddings = model.encode(
-        texts_to_embed,
-        normalize_embeddings=True,
-        batch_size=64,
-        show_progress_bar=False,
-    )
-
-    relevant: List[Dict[str, str]] = []
-    similarities = cosine_similarity(comment_embeddings, query_emb).flatten()
-
-    for sim, meta in zip(similarities, cleaned_meta):
-        if float(sim) >= threshold:
-            relevant.append(meta)
+    results = await asyncio.gather(*[process_comment(c) for c in payload.comments])
+    relevant = [r for r in results if r is not None]
 
     return DeduplicationResponse(
         product=payload.product,

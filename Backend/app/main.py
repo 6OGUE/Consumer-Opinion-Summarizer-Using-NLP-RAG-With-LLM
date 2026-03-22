@@ -1,4 +1,5 @@
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from app.local_query_processing import router as product_extract_local
 from app.llm_query_proessing_hosted import router as product_extract_hosted
@@ -11,6 +12,13 @@ from app.final_llm_call import router as final_call
 from app.chatbot import router as chatbot
 
 app = FastAPI()
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # Step 1
 app.include_router(product_extract_local, prefix="/product_extract_local", tags=["Product Extract Local"]) 

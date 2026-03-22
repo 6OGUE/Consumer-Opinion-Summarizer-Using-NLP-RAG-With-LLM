@@ -15,7 +15,6 @@ client = genai.Client(api_key=api_key)
 class CommentResult(BaseModel):
     summary: str
     sentiment: str          
-    keywords: List[str]
 
 
 class ProcessingResponse(BaseModel):

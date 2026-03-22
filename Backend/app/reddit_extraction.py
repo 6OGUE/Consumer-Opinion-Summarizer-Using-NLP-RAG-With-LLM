@@ -21,7 +21,19 @@ HEADERS = {
 
 @router.post("/scrape-reddit", response_model=RedditResponse)
 def scrape_reddit(request: RedditRequest):
-
+    try:
+        with open("reddit_data.json", "r", encoding="utf-8") as f:
+            existing_data = json.load(f)
+            if (
+                existing_data
+                and isinstance(existing_data, dict)
+                and existing_data.get("product", "").lower() == request.product.lower()
+                and existing_data.get("count", 0) >= request.limit
+            ):
+                print("Skipped scraping, Used existing data")
+                return RedditResponse(**existing_data)
+    except (FileNotFoundError, json.JSONDecodeError, Exception):
+        pass 
     search_url = "https://old.reddit.com/search.json"
     params = {
         "q": f"{request.product} review",

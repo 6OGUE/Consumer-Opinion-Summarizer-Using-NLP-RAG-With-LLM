@@ -7,7 +7,6 @@ router = APIRouter()
 class CommentResult(BaseModel):
     summary: str
     sentiment: str
-    keywords: List[str]
 
 
 class ProcessingResponse(BaseModel):
@@ -33,7 +32,7 @@ def calculate_scores(data: ProcessingResponse) -> float:
     if total == 0:
         return 0.0
 
-    return ((score + total) / (total * 2)) * 100
+    return round(((score + total) / (total * 2)) * 100)
 
 @router.post("/calc_score", response_model=ScoreResponse)
 def calc_score(data: ProcessingResponse):
