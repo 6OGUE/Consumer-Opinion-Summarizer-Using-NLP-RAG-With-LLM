@@ -164,7 +164,7 @@ export default function App() {
         {/* ── Stage: Query ── */}
         {stage === "query" && (
           <div className="card">
-            <div className="card-label">01 — Enter your product query</div>
+            <div className="card-label">Enter Product</div>
             <div className="input-row">
               <input
                 className="input-field"
@@ -190,15 +190,15 @@ export default function App() {
         {/* ── Stage: Confirm Local ── */}
         {stage === "confirm_local" && (
           <div className="card">
-            <div className="card-label">02 — Confirm extracted product</div>
+            <div className="card-label">Confirm extracted product</div>
             <div className="extracted-box">
-              <div className="extracted-label">Extracted via local model</div>
+              <div className="extracted-label">Extracted Product</div>
               <div className="extracted-value">{extracted}</div>
             </div>
             <p style={{ fontSize: 13, color: "var(--muted)", marginBottom: 20 }}>
-              Does this match what you're looking for?
+              Is this what you're looking for?
             </p>
-            <div className="btn-row">
+            <div className="btn-row">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
               <button className="btn btn-primary btn-sm" onClick={handleConfirm}>
                 ✓ Yes, continue
               </button>
@@ -242,11 +242,15 @@ export default function App() {
         {/* ── Stage: Quantity ── */}
         {stage === "quantity" && (
           <div className="card">
-            <div className="card-label">03 — Data quantity</div>
+            <div className="card-label">Data quantity</div>
             <div className="quantity-wrap">
               <div className="product-badge">
-                <span>⬡</span>
-                <span>{product}</span>
+                &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+                &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+                &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span>⬡</span>
+                <span>{product}</span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+                &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+                &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
               </div>
               <p style={{ fontSize: 13, color: "var(--muted)" }}>
                 How many Reddit comments should we fetch?
@@ -278,7 +282,7 @@ export default function App() {
         {/* ── Stage: Pipeline ── */}
         {(stage === "pipeline" || stage === "done") && (
           <div className="card" ref={resultRef}>
-            <div className="card-label">04 — Pipeline</div>
+            <div className="card-label">Pipeline</div>
             <ProgressBar steps={steps} />
 
             {error && <div className="error-msg">{error}</div>}
@@ -291,7 +295,7 @@ export default function App() {
                 <div className="result-section">
                   <div className="result-title">Final Analytics</div>
                   <p style={{ marginBottom: 16, color: "var(--muted)" }}>
-                    Pipeline complete. View the LLM insights on a dedicated page.
+                    Insights have been Prepared Successfully
                   </p>
                   <button
                     className="btn btn-primary"
@@ -316,7 +320,7 @@ export default function App() {
       {/* Insights page */}
       {stage === "insights" && finalInsight && (
         <div className="card" style={{ marginTop: 20 }}>
-          <div className="card-label">05 — Insights</div>
+          <div className="card-label">Insights</div>
           <div className="insights-header">
             <div className="score-section">
               <div className="score-circle" style={{
