@@ -1,7 +1,7 @@
 import { useState, useRef } from "react";
 import "./App.css";
 
-import type { Stage, RedditData, ProcessedData, PipelineStep } from './types';
+import type { Stage, RedditData, ProcessedData, PipelineStep, FinalInsightResponse } from './types';
 import { STEPS } from './constants';
 import { post } from './utils';
 import ProgressBar from './components/ProgressBar';
@@ -22,9 +22,9 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [steps, setSteps] = useState<PipelineStep[]>(STEPS.map((s) => ({ ...s })));
-  const [sources, setSources] = useState<string[]>([]);
-  const [score, setScore] = useState<unknown>(null);
-  const [finalResult, setFinalResult] = useState<ProcessedData | null>(null);
+  const [score, setScore] = useState<{ score: number } | null>(null);
+  const [processedData, setProcessedData] = useState<ProcessedData | null>(null);
+  const [finalInsight, setFinalInsight] = useState<FinalInsightResponse | null>(null);
   const [showChatbot, setShowChatbot] = useState(false);
   const resultRef = useRef<HTMLDivElement>(null);
 
@@ -96,7 +96,6 @@ export default function App() {
         product,
         limit,
       });
-      setSources(reddit.sources);
       setStep(0, "done");
 
       let payload: { product: string; count: number; comments: unknown } = {
@@ -115,16 +114,17 @@ export default function App() {
 
       setStep(3, "loading");
       const processed = await post<ProcessedData>("/process_comments/process_comments", payload);
+      setProcessedData(processed);
       setStep(3, "done");
 
       setStep(4, "loading");
-      const scoreRes = await post("/score_finder/calc_score", processed);
+      const scoreRes = await post<{ score: number }>("/score_finder/calc_score", processed);
       setScore(scoreRes);
       setStep(4, "done");
 
       setStep(5, "loading");
-      await new Promise(r => setTimeout(r, 400));
-      setFinalResult(processed);
+      const llmResult = await post<FinalInsightResponse>("/final_call/llm", processed);
+      setFinalInsight(llmResult);
       setStep(5, "done");
 
       setStage("done");
@@ -146,8 +146,8 @@ export default function App() {
     setQuantity("");
     setError("");
     setScore(null);
-    setFinalResult(null);
-    setSources([]);
+    setProcessedData(null);
+    setFinalInsight(null);
     setShowChatbot(false);
     setSteps(STEPS.map((s) => ({ ...s })));
   }
@@ -288,52 +288,19 @@ export default function App() {
               <>
                 <div className="divider" />
 
-                {sources.length > 0 && (
-                  <div className="result-section">
-                    <div className="result-title">Sources ({sources.length})</div>
-                    <div className="sources-list">
-                      {sources.map((s, i) => (
-                        <div key={i} className="source-item" title={s}>{s}</div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {score !== null && (
-                  <div className="result-section">
-                    <div className="result-title">Score</div>
-                    <div className="result-json">
-                      {JSON.stringify(score, null, 2)}
-                    </div>
-                  </div>
-                )}
-
-                {finalResult !== null && (
-                  <div className="result-section">
-                    <div className="result-title">Final Result</div>
-                    <div className="result-json">
-                      {JSON.stringify(finalResult, null, 2)}
-                    </div>
-                  </div>
-                )}
-
-                {/* Chat CTA */}
-                {finalResult && (
-                  <div className="chat-cta">
-                    <div className="chat-cta-text">
-                      <strong>Have questions?</strong> Ask our AI about the analysis.
-                    </div>
-                    <button
-                      className="btn btn-chat"
-                      onClick={() => setShowChatbot(true)}
-                    >
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-                      </svg>
-                      Chat about {finalResult.product}
-                    </button>
-                  </div>
-                )}
+                <div className="result-section">
+                  <div className="result-title">Final Analytics</div>
+                  <p style={{ marginBottom: 16, color: "var(--muted)" }}>
+                    Pipeline complete. View the LLM insights on a dedicated page.
+                  </p>
+                  <button
+                    className="btn btn-primary"
+                    onClick={() => setStage("insights")}
+                    disabled={!finalInsight}
+                  >
+                    Go to Insights →
+                  </button>
+                </div>
 
                 <div className="reset-row">
                   <button className="btn btn-ghost btn-sm" onClick={reset}>
@@ -346,10 +313,67 @@ export default function App() {
         )}
       </div>
 
+      {/* Insights page */}
+      {stage === "insights" && finalInsight && (
+        <div className="card" style={{ marginTop: 20 }}>
+          <div className="card-label">05 — Insights</div>
+          <div className="insights-header">
+            <div className="score-section">
+              <div className="score-circle" style={{
+                background: score?.score != null && score.score > 50 ? 'rgba(62,255,163,0.1)' : 'rgba(255,94,94,0.1)',
+                borderColor: score?.score != null && score.score > 50 ? 'var(--success)' : 'var(--error)'
+              }}>
+                <span>{score?.score != null ? `${score.score}%` : "N/A"}</span>
+              </div>
+              <div className="score-label">Overall score</div>
+            </div>
+            <div className="product-name">{processedData?.product.toUpperCase()}</div>
+            <div style={{display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px'}}>
+            <button className="btn btn-chat" onClick={() => setShowChatbot(true)} style={{borderRadius: '50%', width: '64px', height: '64px', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center'}}>
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="12" y1="2" x2="12" y2="5"/>
+              <circle cx="12" cy="2" r="1" fill="currentColor" stroke="none"/>
+              <rect x="3" y="5" width="18" height="14" rx="3" ry="3"/>
+              <circle cx="9" cy="11" r="1.5" fill="currentColor" stroke="none"/>
+              <circle cx="15" cy="11" r="1.5" fill="currentColor" stroke="none"/>
+              <path d="M8 15 Q12 18 16 15"/>
+            </svg>
+  </button>
+  <span style={{fontSize: '12px', fontWeight: 500}}>Chat</span>
+</div>
+
+          </div>
+          <div className="insights-content">
+            <h2>Overview</h2>
+            <p>{finalInsight.overview}</p>
+
+            <h3>Unique Features</h3>
+            <ul>{finalInsight.unique_features.map((item, idx) => <li key={idx}>{item}</li>)}</ul>
+
+            <h3>Strengths</h3>
+            <ul>{finalInsight.strengths.map((item, idx) => <li key={idx}>{item}</li>)}</ul>
+
+            <h3>Weaknesses</h3>
+            <ul>{finalInsight.weaknesses.map((item, idx) => <li key={idx}>{item}</li>)}</ul>
+
+            <h3>Alternatives</h3>
+            <ul>{finalInsight.alternatives.map((item, idx) => <li key={idx}>{item}</li>)}</ul>
+
+            <h3>Final Insight</h3>
+            <p>{finalInsight.final_insight}</p>
+
+            <div className="reset-row" style={{ marginTop: 20 }}>
+              <button className="btn btn-ghost btn-sm" onClick={() => setStage("done")}>← Back</button>
+              <button className="btn btn-ghost btn-sm" onClick={reset}>↩ Start over</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Chatbot overlay — only rendered after pipeline is done */}
-      {showChatbot && finalResult && (
+      {showChatbot && processedData && (
         <ChatBot
-          processedData={finalResult}
+          processedData={processedData}
           onClose={() => setShowChatbot(false)}
         />
       )}
