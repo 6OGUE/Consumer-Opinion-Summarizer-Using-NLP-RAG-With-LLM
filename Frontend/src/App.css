@@ -401,6 +401,13 @@
           text-overflow: ellipsis;
           white-space: nowrap;
         }
+        .source-item a {
+          color: inherit;
+          text-decoration: none;
+        }
+        .source-item a:hover {
+          text-decoration: underline;
+        }
 
         .divider {
           height: 1px;

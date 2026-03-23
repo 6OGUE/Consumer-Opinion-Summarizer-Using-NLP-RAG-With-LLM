@@ -65,25 +65,48 @@ def final_llm_call(data: ProcessingResponse) -> FinalInsightResponse:
     
     input_json = data.model_dump_json(indent=2)
     prompt = f"""
-    You are an opinion summarization system.
+    You are an expert product analyst and technical writer specializing in consumer opinion synthesis.
 
-    Task: Analyze the following ProcessingResponse JSON and create summarized insights.
+    Task: Analyze the following ProcessingResponse JSON and generate a structured, professional product intelligence report.
+
+    TONE & STYLE REQUIREMENTS:
+    - All output must be written in formal, professional English
+    - Rephrase raw or colloquial user comments into polished, analytical statements
+    - Avoid casual language, slang, or direct quote fragments
+    - Express insights as objective observations, not personal opinions
+    - Use precise, industry-appropriate vocabulary
+
+    FORMATTING RULES:
+    - Each array item must be a complete, standalone sentence
+    - Sentences must follow Subject → Predicate → Object structure where applicable
+    - Begin strength/weakness points with action-oriented or descriptive phrases
+      (e.g., "Demonstrates superior...", "Exhibits a notable lack of...", "Users consistently report...")
+    - The overview and final_insight must be 2–3 sentences, coherent and well-structured
 
     Return ONLY valid JSON matching this exact schema:
     {{
-    "overview": "string - brief product summary",
-    "unique_features": ["string array - unique product features"],
-    "strengths": ["string array - positive aspects - from the comments only"],
-    "weaknesses": ["string array - negative aspects - from the comments only"],  
-    "alternatives": ["string array - alternative product names"],
-    "final_insight": "string - conclusion based on the analysis"
+        "overview": "string - a formal 2-3 sentence product summary",
+        "unique_features": ["string array - formally stated unique product features"],
+        "strengths": ["string array - professionally rephrased positive aspects derived from user comments"],
+        "weaknesses": ["string array - professionally rephrased negative aspects derived from user comments"],
+        "alternatives": ["string array - alternative product names mentioned"],
+        "final_insight": "string - a formal 2-3 sentence conclusion grounded in the analysis"
     }}
 
-    CRITICAL: Base all points strictly on the provided comments, keywords and sentiments. No assumptions.
+    TRANSFORMATION EXAMPLES (for tone calibration):
+    - Raw: "i love my iphone"       → Formal: "Users express strong overall satisfaction with the device."
+    - Raw: "battery dies too fast"  → Formal: "Battery longevity is frequently cited as a significant area of concern."
+    - Raw: "camera is insane"       → Formal: "The camera system consistently receives exceptional praise for its performance."
+    - Raw: "way too expensive"      → Formal: "The product's pricing is perceived as a barrier to accessibility by a notable portion of users."
+
+    CRITICAL CONSTRAINTS:
+    - Base all insights strictly on the provided comments, keywords, and sentiments — no assumptions or external knowledge
+    - Do not fabricate features, strengths, weaknesses, or alternatives not present in the data
+    - Do not include raw user quotes or informal phrasing in the output
 
     Input Data:
-{input_json}
-"""
+    {input_json}
+    """
     
     response = client.models.generate_content(
         model="gemini-2.5-flash-lite",

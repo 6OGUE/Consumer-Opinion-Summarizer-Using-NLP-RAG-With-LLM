@@ -25,6 +25,7 @@ export default function App() {
   const [score, setScore] = useState<{ score: number } | null>(null);
   const [processedData, setProcessedData] = useState<ProcessedData | null>(null);
   const [finalInsight, setFinalInsight] = useState<FinalInsightResponse | null>(null);
+  const [sources, setSources] = useState<string[]>([]);
   const [showChatbot, setShowChatbot] = useState(false);
   const resultRef = useRef<HTMLDivElement>(null);
 
@@ -96,6 +97,7 @@ export default function App() {
         product,
         limit,
       });
+      setSources(reddit.sources);
       setStep(0, "done");
 
       let payload: { product: string; count: number; comments: unknown } = {
@@ -148,6 +150,7 @@ export default function App() {
     setScore(null);
     setProcessedData(null);
     setFinalInsight(null);
+    setSources([]);
     setShowChatbot(false);
     setSteps(STEPS.map((s) => ({ ...s })));
   }
@@ -365,6 +368,21 @@ export default function App() {
 
             <h3>Final Insight</h3>
             <p>{finalInsight.final_insight}</p>
+
+            {sources.length > 0 && (
+              <>
+                <h3>Sources</h3>
+                <div className="sources-list">
+                  {sources.map((source, idx) => (
+                    <div key={idx} className="source-item">
+                      <a href={source} target="_blank" rel="noopener noreferrer">
+                        {source}
+                      </a>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
 
             <div className="reset-row" style={{ marginTop: 20 }}>
               <button className="btn btn-ghost btn-sm" onClick={() => setStage("done")}>← Back</button>
