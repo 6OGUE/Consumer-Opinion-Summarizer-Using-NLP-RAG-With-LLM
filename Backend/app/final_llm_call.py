@@ -6,24 +6,27 @@ from pydantic import BaseModel
 from typing import Optional, List, Dict
 from dotenv import load_dotenv
 from fastapi import APIRouter
+
 router = APIRouter()
 
 load_dotenv()
 api_key = os.getenv("api_key")
 client = genai.Client(api_key=api_key)
 
+CACHE_FILE = "llm_data.json"
+
 class CommentResult(BaseModel):
     summary: str
     sentiment: str          
-
 
 class ProcessingResponse(BaseModel):
     product: str
     count: int
     comments: Dict[int, CommentResult]
 
-
 class FinalInsightResponse(BaseModel):
+    product: str
+    count: int
     overview: str
     unique_features: List[str]
     strengths: List[str]
@@ -32,37 +35,28 @@ class FinalInsightResponse(BaseModel):
     final_insight: str
 
 
-def final_llm_call(data: ProcessingResponse) -> FinalInsightResponse:
-
-    if os.getenv("test"):
-        return FinalInsightResponse(
-            overview="iPhone 14 is Apple’s 2022 mainstream flagship phone, featuring a 6.1-inch Super Retina XDR OLED display, A15 Bionic chip, dual-camera system, and iOS 16, still supported in 2026.",
-    unique_features=[
-        "Emergency SOS via satellite",
-        "Crash Detection automatically calls emergency services",
-        "Photonic Engine for better low-light photos"
-    ],
-    strengths=[
-        "Reliable, smooth everyday performance",
-        "Solid battery life lasting a full day",
-        "Consistently excellent camera output for casual photography",
-        "Stable and optimized iOS experience"
-    ],
-    weaknesses=[
-        "No 120 Hz display",
-        "Older A15 chip compared to Pro models",
-        "Uses Lightning port instead of USB-C",
-        "Limited camera versatility with no telephoto lens"
-    ],
-    alternatives=[
-        "iPhone 14 Pro with faster chip, 120 Hz display, advanced cameras",
-        "OnePlus 11",
-        "Xiaomi 13 Pro",
-        "Sony Xperia 1 IV for 4K screen and advanced camera controls"
-    ],
-    final_insight="iPhone 14 is a dependable and refined device, still fully usable in 2026, ideal for smooth software and consistent camera performance, but lacks cutting-edge hardware, so tech enthusiasts might prefer alternatives."
-        )
+def load_cached_response(product: str, count: int) -> FinalInsightResponse | None:
+    if not os.path.exists(CACHE_FILE):
+        return None
     
+    try:
+        with open(CACHE_FILE, "r") as f:
+            cached_data = json.load(f)
+        
+        if cached_data.get("product") == product and cached_data.get("count") == count:
+            return FinalInsightResponse(**cached_data)
+    except (json.JSONDecodeError, KeyError, ValueError):
+        pass
+    
+    return None
+
+
+def save_response_to_cache(response: FinalInsightResponse) -> None:
+    with open(CACHE_FILE, "w") as f:
+        json.dump(response.model_dump(), f, indent=2)
+
+
+def final_llm_call(data: ProcessingResponse) -> FinalInsightResponse:
     input_json = data.model_dump_json(indent=2)
     prompt = f"""
     You are an expert product analyst and technical writer specializing in consumer opinion synthesis.
@@ -81,15 +75,15 @@ def final_llm_call(data: ProcessingResponse) -> FinalInsightResponse:
     - Sentences must follow Subject → Predicate → Object structure where applicable
     - Begin strength/weakness points with action-oriented or descriptive phrases
       (e.g., "Demonstrates superior...", "Exhibits a notable lack of...", "Users consistently report...")
-    - The overview and final_insight must be 2–3 sentences, coherent and well-structured
+    - The overview and final_insight must be 2-3 sentences, coherent and well-structured
 
     Return ONLY valid JSON matching this exact schema:
     {{
         "overview": "string - a formal 2-3 sentence product summary",
-        "unique_features": ["string array - formally stated unique product features"],
+        "unique_features": ["string array - formally stated highlighted features derived from user comments"],
         "strengths": ["string array - professionally rephrased positive aspects derived from user comments"],
         "weaknesses": ["string array - professionally rephrased negative aspects derived from user comments"],
-        "alternatives": ["string array - alternative product names mentioned"],
+        "alternatives": ["string array - alternative product names mentioned(maximum 3)"],
         "final_insight": "string - a formal 2-3 sentence conclusion grounded in the analysis"
     }}
 
@@ -116,16 +110,24 @@ def final_llm_call(data: ProcessingResponse) -> FinalInsightResponse:
             "max_output_tokens": 1000,
             "response_mime_type": "application/json"
         })
+    
     result_dict = json.loads(response.text)
+    result_dict["product"] = data.product
+    result_dict["count"] = data.count
     validated = FinalInsightResponse(**result_dict)
     return validated
 
+
 @router.post("/llm", response_model=FinalInsightResponse)
 def llm_process(data: ProcessingResponse):
-    
     try:
+        cached = load_cached_response(data.product, data.count)
+        if cached:
+            return cached
         result = final_llm_call(data)
+        save_response_to_cache(result)
         return result
+
     except json.JSONDecodeError as e:
         raise HTTPException(status_code=502, detail=f"Invalid LLM response: {str(e)}")
     except Exception as e:

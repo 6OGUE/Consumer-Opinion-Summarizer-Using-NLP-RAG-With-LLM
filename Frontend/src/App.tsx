@@ -354,7 +354,7 @@ export default function App() {
             <h2>Overview</h2>
             <p>{finalInsight.overview}</p>
 
-            <h3>Unique Features</h3>
+            <h3>Highlights</h3>
             <ul>{finalInsight.unique_features.map((item, idx) => <li key={idx}>{item}</li>)}</ul>
 
             <h3>Strengths</h3>
