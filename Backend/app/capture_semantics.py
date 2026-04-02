@@ -77,12 +77,12 @@ def clean_text(text: str) -> str:
     text = re.sub(r"&quot;|&#34;", '"', text)
     text = re.sub(r"&#?\w+;", " ", text)
     text = re.sub(r"[\x00-\x1f\x7f-\x9f]", " ", text)
+    text = re.sub(r"[\\#~]", "", text)
     text = re.sub(r"\s+", " ", text).strip()
     return text if len(text) >= 5 else ""
 
 
 def _call_ollama_sync(comment_text: str) -> Dict | None:
-    """Blocking Ollama call using requests — runs inside a thread."""
     safe_comment = comment_text.replace('"', "'").replace("\n", " ").strip()
     prompt = ONE_SHOT_PROMPT.format(comment=safe_comment)
 
@@ -120,8 +120,6 @@ async def process_comment(comment: Dict) -> Dict | None:
     body_keys = ("body", "text", "comment", "content")
     body_key = next((k for k in body_keys if k in comment), None)
     raw_body = str(comment.get(body_key, "")) if body_key else ""
-
-    # Use light clean for classification to preserve context
     cleaned_body = clean_text(raw_body)
 
     if not cleaned_body:
@@ -132,6 +130,8 @@ async def process_comment(comment: Dict) -> Dict | None:
     if result is None or result.get("classification", "").lower() != "review":
         return None
 
+    if body_key:
+        comment = {**comment, body_key: cleaned_body}
     return comment
 
 

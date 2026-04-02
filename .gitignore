@@ -4,6 +4,8 @@ __pycache__/
 venv/
 .venv/
 .env
+llm_data.json
+reddit_data.json
 .env.*
 pytest_cache/
 .coverage
