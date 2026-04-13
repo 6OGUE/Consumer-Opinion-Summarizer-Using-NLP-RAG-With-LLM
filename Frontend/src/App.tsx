@@ -6,12 +6,31 @@ import { STEPS } from './constants';
 import { post } from './utils';
 import ProgressBar from './components/ProgressBar';
 import ChatBot from './components/ChatBot';
+import { exportInsightsToPDF } from './utils/pdfExport';
 
-
-
-
-
-
+/* Visual-only helper component — no logic */
+function ScoreRing({ score, isHigh }: { score: number; isHigh: boolean }) {
+  const r = 46;
+  const circ = 2 * Math.PI * r;
+  const offset = circ - (score / 100) * circ;
+  const color = isHigh ? 'var(--cyan)' : 'var(--error)';
+  return (
+    <svg width="120" height="120" viewBox="0 0 120 120" className="score-svg">
+      <circle cx="60" cy="60" r={r} fill="none" stroke="rgba(255,255,255,0.07)" strokeWidth="7" />
+      <circle
+        cx="60" cy="60" r={r} fill="none"
+        stroke={color} strokeWidth="7"
+        strokeDasharray={circ} strokeDashoffset={offset}
+        strokeLinecap="round" transform="rotate(-90 60 60)"
+        style={{ transition: 'stroke-dashoffset 0.9s cubic-bezier(.4,0,.2,1)' }}
+      />
+      <text x="60" y="65" textAnchor="middle" fill={color}
+        fontSize="22" fontWeight="800" fontFamily="'Syne', sans-serif">
+        {score}%
+      </text>
+    </svg>
+  );
+}
 
 export default function App() {
   const [stage, setStage] = useState<Stage>("query");
@@ -158,109 +177,101 @@ export default function App() {
   return (
     <>
       <div className="shell">
-        {/* Header */}
-        <div className="header">
-          <div className="header-tag">Product Intelligence</div>
-          <h1>Consumer<br /><span></span> Opinion Summarizer</h1>
-        </div>
 
         {/* ── Stage: Query ── */}
         {stage === "query" && (
-          <div className="card">
-            <div className="card-label">Enter Product</div>
-            <div className="input-row">
-              <input
-                className="input-field"
-                type="text"
-                placeholder="e.g. Is the iphone 14 worth purchasing?"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && handleGo()}
-                autoFocus
-              />
-              <button
-                className="btn btn-primary"
-                onClick={handleGo}
-                disabled={loading || !query.trim()}
-              >
-                {loading ? <span className="spinner" /> : "Go →"}
-              </button>
+          <div className="query-stage">
+            <div className="brand-eyebrow"></div>
+            <h1 className="hero-title">Consumer Opinion<br />Summarizer</h1>
+            <div className="card query-card">
+              <div className="card-label">Enter Product</div>
+              <div className="input-row">
+                <input
+                  className="input-field"
+                  type="text"
+                  placeholder="e.g. Is the iphone 14 worth purchasing?"
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && handleGo()}
+                  autoFocus
+                />
+                <button
+                  className="btn btn-primary"
+                  onClick={handleGo}
+                  disabled={loading || !query.trim()}
+                >
+                  {loading ? <span className="spinner" /> : "Go →"}
+                </button>
+              </div>
+              {error && <div className="error-msg">{error}</div>}
             </div>
-            {error && <div className="error-msg">{error}</div>}
           </div>
         )}
 
         {/* ── Stage: Confirm Local ── */}
         {stage === "confirm_local" && (
-          <div className="card">
-            <div className="card-label">Confirm extracted product</div>
-            <div className="extracted-box">
-              <div className="extracted-label">Extracted Product</div>
-              <div className="extracted-value">{extracted}</div>
+          <div className="confirm-stage">
+            <div className="page-eyebrow">Consumer Opinion Summarizer</div>
+            <div className="card card--light">
+              <div className="card-label">Confirm extracted product</div>
+              <div className="extracted-box">
+                <div className="extracted-label">Extracted Product</div>
+                <div className="extracted-value">{extracted}</div>
+              </div>
+              <p className="confirm-hint">Is this what you're looking for?</p>
+              <div className="btn-stack">
+                <button className="btn btn-primary btn-full" onClick={handleConfirm}>
+                  Yes, continue →
+                </button>
+                <button
+                  className="btn btn-danger btn-full"
+                  onClick={handleHosted}
+                  disabled={loading}
+                >
+                  {loading ? <span className="spinner spinner--dark" /> : "✕  No, try again"}
+                </button>
+              </div>
+              {error && <div className="error-msg">{error}</div>}
             </div>
-            <p style={{ fontSize: 13, color: "var(--muted)", marginBottom: 20 }}>
-              Is this what you're looking for?
-            </p>
-            <div className="btn-row">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-              <button className="btn btn-primary btn-sm" onClick={handleConfirm}>
-                ✓ Yes, continue
-              </button>
-              <button
-                className="btn btn-danger btn-sm"
-                onClick={handleHosted}
-                disabled={loading}
-              >
-                {loading ? <span className="spinner" /> : "✕ No, try again"}
-              </button>
-            </div>
-            {error && <div className="error-msg">{error}</div>}
+            <div className="page-footer-label"></div>
           </div>
         )}
 
         {/* ── Stage: Confirm Hosted ── */}
         {stage === "confirm_hosted" && (
-          <div className="card">
-            <div className="card-label">02 — Confirm extracted product</div>
-            <div className="extracted-box">
-              <div className="extracted-label">Extracted via hosted model</div>
-              <div className="extracted-value">{extracted}</div>
+          <div className="confirm-stage">
+            <div className="page-eyebrow">Consumer Opinion Summarizer</div>
+            <div className="card card--light">
+              <div className="card-label">Confirm extracted product</div>
+              <div className="extracted-box">
+                <div className="extracted-label">Extracted via hosted model</div>
+                <div className="extracted-value">{extracted}</div>
+              </div>
+              <p className="confirm-hint">Does this look right?</p>
+              <div className="btn-stack">
+                <button className="btn btn-primary btn-full" onClick={handleConfirm}>
+                  Yes, continue →
+                </button>
+                <button className="btn btn-danger btn-full" onClick={handleFinalReject}>
+                  ✕  No — use my original query
+                </button>
+              </div>
             </div>
-            <p style={{ fontSize: 13, color: "var(--muted)", marginBottom: 20 }}>
-              Does this look right?
-            </p>
-            <div className="btn-row">
-              <button className="btn btn-primary btn-sm" onClick={handleConfirm}>
-                ✓ Yes, continue
-              </button>
-              <button
-                className="btn btn-danger btn-sm"
-                onClick={handleFinalReject}
-              >
-                ✕ No — use my original query
-              </button>
-            </div>
+            <div className="page-footer-label"></div>
           </div>
         )}
 
         {/* ── Stage: Quantity ── */}
         {stage === "quantity" && (
-          <div className="card">
-            <div className="card-label">Data quantity</div>
-            <div className="quantity-wrap">
-              <div className="product-badge">
-                &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-                &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-                &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span>⬡</span>
-                <span>{product}</span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-                &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-                &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-              </div>
-              <p style={{ fontSize: 13, color: "var(--muted)" }}>
-                How many Reddit comments should we fetch?
-              </p>
-              <div className="input-row">
+          <div className="quantity-stage">
+            <div className="brand-eyebrow--sm"></div>
+            <div className="qty-badge">Data Quantity</div>
+            <div className="qty-product-name">{product}</div>
+            <div className="card qty-card">
+              <div className="quantity-wrap">
+                <p className="qty-question">How many Reddit comments should we fetch?</p>
                 <input
-                  className="input-field"
+                  className="input-field input-field--lg"
                   type="number"
                   placeholder="e.g. 100"
                   min={1}
@@ -270,36 +281,36 @@ export default function App() {
                   autoFocus
                 />
                 <button
-                  className="btn btn-primary"
+                  className="btn btn-primary btn-full"
                   onClick={handleRunPipeline}
                   disabled={!quantity}
                 >
                   Run →
                 </button>
+                {error && <div className="error-msg">{error}</div>}
               </div>
-              {error && <div className="error-msg">{error}</div>}
             </div>
+            <div className="page-footer-label">Estimated processing time: ~12 seconds</div>
           </div>
         )}
 
         {/* ── Stage: Pipeline ── */}
         {(stage === "pipeline" || stage === "done") && (
-          <div className="card" ref={resultRef}>
-            <div className="card-label">Pipeline</div>
-            <ProgressBar steps={steps} />
+          <div className="pipeline-stage" ref={resultRef}>
+            <div className="brand-eyebrow"></div>
+            <div className="card pipeline-card">
+              <div className="card-label" style={{ textAlign: 'center' }}>Pipeline</div>
+              <ProgressBar steps={steps} />
+              <div className="pipeline-divider" />
+              <div className="pipeline-engine-label"></div>
+            </div>
 
             {error && <div className="error-msg">{error}</div>}
 
-            {/* Results */}
             {stage === "done" && (
               <>
-                <div className="divider" />
-
                 <div className="result-section">
-                  <div className="result-title">Final Analytics</div>
-                  <p style={{ marginBottom: 16, color: "var(--muted)" }}>
-                    Insights have been Prepared Successfully
-                  </p>
+                  <p className="result-hint">Insights have been prepared successfully</p>
                   <button
                     className="btn btn-primary"
                     onClick={() => setStage("insights")}
@@ -308,11 +319,8 @@ export default function App() {
                     Go to Insights →
                   </button>
                 </div>
-
                 <div className="reset-row">
-                  <button className="btn btn-ghost btn-sm" onClick={reset}>
-                    ↩ Start over
-                  </button>
+                  <button className="btn btn-ghost btn-sm" onClick={reset}>↩ Start over</button>
                 </div>
               </>
             )}
@@ -320,79 +328,94 @@ export default function App() {
         )}
       </div>
 
-      {/* Insights page */}
+      {/* ── Insights page ── */}
       {stage === "insights" && finalInsight && (
-        <div className="card" style={{ marginTop: 20 }}>
-          <div className="card-label">Insights</div>
-          <div className="insights-header">
-            <div className="score-section">
-              <div className="score-circle" style={{
-                background: score?.score != null && score.score > 50 ? 'rgba(62,255,163,0.1)' : 'rgba(255,94,94,0.1)',
-                borderColor: score?.score != null && score.score > 50 ? 'var(--success)' : 'var(--error)'
-              }}>
-                <span>{score?.score != null ? `${score.score}%` : "N/A"}</span>
-              </div>
-              <div className="score-label">Overall score</div>
-            </div>
-            <div className="product-name">{processedData?.product.toUpperCase()}</div>
-            <div style={{display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px'}}>
-            <button className="btn btn-chat" onClick={() => setShowChatbot(true)} style={{borderRadius: '50%', width: '64px', height: '64px', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center'}}>
-            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-              <line x1="12" y1="2" x2="12" y2="5"/>
-              <circle cx="12" cy="2" r="1" fill="currentColor" stroke="none"/>
-              <rect x="3" y="5" width="18" height="14" rx="3" ry="3"/>
-              <circle cx="9" cy="11" r="1.5" fill="currentColor" stroke="none"/>
-              <circle cx="15" cy="11" r="1.5" fill="currentColor" stroke="none"/>
-              <path d="M8 15 Q12 18 16 15"/>
-            </svg>
-  </button>
-  <span style={{fontSize: '12px', fontWeight: 500}}>Chat</span>
-</div>
+        <div className="insights-page">
 
+          <div className="insights-topbar">
+            <div className="insights-topbar-left">
+              <div className="card-label">Insights</div>
+              <div className="insights-product-name">{processedData?.product.toUpperCase()}</div>
+            </div>
+            <div className="insights-action-btns">
+              <button className="icon-btn" title="Chat" onClick={() => setShowChatbot(true)}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+                </svg>
+              </button>
+              <button
+                className="icon-btn"
+                title="Download PDF"
+                onClick={() => finalInsight && exportInsightsToPDF(finalInsight, processedData?.product || '', score?.score || null)}
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                  <polyline points="7 10 12 15 17 10" />
+                  <line x1="12" y1="15" x2="12" y2="3" />
+                </svg>
+              </button>
+            </div>
           </div>
-          <div className="insights-content">
+
+          <div className="score-row">
+            {score?.score != null && (
+              <ScoreRing score={score.score} isHigh={score.score > 50} />
+            )}
+            <div className="score-meta">
+              <div className="score-meta-label">Overall Score</div>
+              <p className="score-meta-desc">
+                Performance reflects a balanced integration of hardware and software optimized for long‑term reliability.
+              </p>
+            </div>
+          </div>
+
+          <div className="insights-body">
             <h2>Overview</h2>
             <p>{finalInsight.overview}</p>
 
+            <div className="divider" />
             <h3>Highlights</h3>
             <ul>{finalInsight.unique_features.map((item, idx) => <li key={idx}>{item}</li>)}</ul>
 
+            <div className="divider" />
             <h3>Strengths</h3>
             <ul>{finalInsight.strengths.map((item, idx) => <li key={idx}>{item}</li>)}</ul>
 
+            <div className="divider" />
             <h3>Weaknesses</h3>
             <ul>{finalInsight.weaknesses.map((item, idx) => <li key={idx}>{item}</li>)}</ul>
 
+            <div className="divider" />
             <h3>Alternatives</h3>
             <ul>{finalInsight.alternatives.map((item, idx) => <li key={idx}>{item}</li>)}</ul>
 
-            <h3>Final Insight</h3>
+            <div className="divider" />
+            <h2>Final Insight</h2>
             <p>{finalInsight.final_insight}</p>
 
             {sources.length > 0 && (
               <>
+                <div className="divider" />
                 <h3>Sources</h3>
                 <div className="sources-list">
                   {sources.map((source, idx) => (
                     <div key={idx} className="source-item">
-                      <a href={source} target="_blank" rel="noopener noreferrer">
-                        {source}
-                      </a>
+                      <a href={source} target="_blank" rel="noopener noreferrer">{source}</a>
                     </div>
                   ))}
                 </div>
               </>
             )}
+          </div>
 
-            <div className="reset-row" style={{ marginTop: 20 }}>
-              <button className="btn btn-ghost btn-sm" onClick={() => setStage("done")}>← Back</button>
-              <button className="btn btn-ghost btn-sm" onClick={reset}>↩ Start over</button>
-            </div>
+          <div className="reset-row" style={{ marginTop: 28 }}>
+            <button className="btn btn-ghost btn-sm" onClick={() => setStage("done")}>← Back</button>
+            <button className="btn btn-ghost btn-sm" onClick={reset}>↩ Start over</button>
           </div>
         </div>
       )}
 
-      {/* Chatbot overlay — only rendered after pipeline is done */}
+      {/* Chatbot overlay */}
       {showChatbot && processedData && (
         <ChatBot
           processedData={processedData}

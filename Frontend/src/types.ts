@@ -30,6 +30,7 @@ export interface ProcessedData {
 }
 
 export interface PipelineStep {
+  id: Key | null | undefined;
   label: string;
   status: "idle" | "loading" | "done" | "error";
 }
