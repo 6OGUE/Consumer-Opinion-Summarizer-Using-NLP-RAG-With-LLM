@@ -1,9 +1,9 @@
-from fastapi import APIRouter, FastAPI
-from pydantic import BaseModel
-from typing import List, Dict
 import numpy as np
 import re
 import requests
+from typing import List, Dict
+from fastapi import APIRouter, FastAPI
+from pydantic import BaseModel
 from sentence_transformers import SentenceTransformer
 
 router = APIRouter()
@@ -23,14 +23,21 @@ def get_embedding_model() -> SentenceTransformer:
     return _embedding_model
 
 
+# ✅ ONLY CHANGE: added category + aspects
 class ChatRequest(BaseModel):
     product: str
+    category: str
+    aspects: List[str]
     count: int
     comments: List[Dict]
     question: str
 
 
+# ✅ ONLY CHANGE: added category + aspects
 class ChatResponse(BaseModel):
+    product: str
+    category: str
+    aspects: List[str]
     question: str
     answer: str
 
@@ -132,6 +139,9 @@ def chat(data: ChatRequest):
     )
 
     return ChatResponse(
+        product=data.product,
+        category=data.category,   # ✅ added
+        aspects=data.aspects,     # ✅ added
         question=data.question,
         answer=answer,
     )

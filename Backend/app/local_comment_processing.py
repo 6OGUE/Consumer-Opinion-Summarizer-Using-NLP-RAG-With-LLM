@@ -1,85 +1,57 @@
 from pydantic import BaseModel
 from typing import List, Dict
-import warnings
+from fastapi import APIRouter
+import httpx
 import torch
 from transformers import AutoTokenizer, AutoModelForSequenceClassification
 import torch.nn.functional as F
-from transformers import logging
-from fastapi import APIRouter
-import httpx
 
 router = APIRouter()
-
-logging.set_verbosity_error()
-warnings.filterwarnings("ignore")
-
-print("Loading ABSA sentiment model...")
-ABSA_MODEL_NAME = "yangheng/deberta-v3-base-absa-v1.1"
-absa_tokenizer = AutoTokenizer.from_pretrained(ABSA_MODEL_NAME)
-absa_model = AutoModelForSequenceClassification.from_pretrained(ABSA_MODEL_NAME)
-absa_model.eval()
-
-DEVICE = 0 if torch.cuda.is_available() else -1
-if DEVICE == 0:
-    absa_model = absa_model.cuda()
-
-
-class RedditResponse(BaseModel):
-    product: str
-    count: int
-    comments: List[Dict]
-
-
-class CommentResult(BaseModel):
-    summary: str
-    sentiment: str
-
-
-class ProcessingResponse(BaseModel):
-    product: str
-    count: int
-    comments: Dict[int, CommentResult]
-
 
 OLLAMA_URL = "http://localhost:11434/api/generate"
 OLLAMA_MODEL = "llama3.2:3b"
 SUMMARISE_MIN_LENGTH = 200
 
+MODEL_NAME = "yangheng/deberta-v3-base-absa-v1.1"
+tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
+model = AutoModelForSequenceClassification.from_pretrained(MODEL_NAME)
+model.eval()
 
-def get_sentiment(text: str, product: str) -> str:
-    try:
-        inputs = absa_tokenizer(
-            product,
-            text,
-            return_tensors="pt",
-            truncation=True,
-            max_length=512,
-            padding=True,
-        )
-
-        if DEVICE == 0:
-            inputs = {k: v.cuda() for k, v in inputs.items()}
-
-        with torch.no_grad():
-            outputs = absa_model(**inputs)
-
-        scores = F.softmax(outputs.logits, dim=-1)
-        label_idx = torch.argmax(scores, dim=-1).item()
-
-        LABEL_MAP = {0: "negative", 1: "neutral", 2: "positive"}
-        return LABEL_MAP.get(label_idx, "neutral")
-
-    except Exception as e:
-        print(f"ABSA sentiment error: {e}")
-        return "neutral"
+DEVICE = 0 if torch.cuda.is_available() else -1
+if DEVICE == 0:
+    model = model.cuda()
 
 
+class CommentResult(BaseModel):
+    summary: str
+    sentiments: Dict[str, str]
+    overall_sentiment: str
+
+
+class ProcessingResponse(BaseModel):
+    product: str
+    category: str
+    aspects: List[str]
+    count: int
+    comments: Dict[int, CommentResult]
+
+
+class FilterResponse(BaseModel):
+    product: str
+    category: str
+    aspects: List[str]
+    count: int
+    comments: Dict[int, CommentResult]
+
+
+# 🔹 Summarization
 def shorten_with_ollama(text: str) -> str:
     prompt = (
-        "Shorten the following comment to a max of 200 chars while preserving all pros, cons and important product related details mentioned exactly. "
-        "Do not add anything new.Do not shorten too much.Should not contain unnecessary slashes or quotes. RETURN ONLY THE SHORTENED COMMENT, NOTHING ELSE."
-        f"Comment:{text}"
+        "Shorten the following comment to max 200 characters while preserving all key product-related details. "
+        "RETURN ONLY THE SHORTENED COMMENT.\n"
+        f"Comment: {text}"
     )
+
     try:
         response = httpx.post(
             OLLAMA_URL,
@@ -91,43 +63,70 @@ def shorten_with_ollama(text: str) -> str:
             timeout=60.0,
         )
         response.raise_for_status()
-        shortened = response.json().get("response", "").strip()
-        return shortened if shortened else text
-    except Exception as e:
-        print(f"Ollama error: {e}")
+        return response.json().get("response", "").strip() or text
+    except Exception:
         return text
 
 
-def process_comment(text: str, product: str) -> CommentResult:
-    if not text:
-        return CommentResult(summary="", sentiment="neutral")
+# 🔹 DeBERTa overall sentiment (proper usage)
+def get_overall_sentiment(text: str, product: str) -> str:
+    try:
+        query = f"What is the overall sentiment towards {product}?"
 
-    sentiment = get_sentiment(text, product)
+        inputs = tokenizer(
+            query,
+            text,
+            return_tensors="pt",
+            truncation=True,
+            max_length=512,
+            padding=True,
+        )
 
-    if len(text) >= SUMMARISE_MIN_LENGTH:
-        summary = shorten_with_ollama(text)
-    else:
-        summary = text
+        if DEVICE == 0:
+            inputs = {k: v.cuda() for k, v in inputs.items()}
 
-    return CommentResult(summary=summary, sentiment=sentiment)
+        with torch.no_grad():
+            outputs = model(**inputs)
+
+        scores = F.softmax(outputs.logits, dim=-1)
+
+        confidence = torch.max(scores).item()
+        label_idx = torch.argmax(scores, dim=-1).item()
+
+        if confidence < 0.5:
+            return "neutral"
+
+        return {0: "negative", 1: "neutral", 2: "positive"}.get(label_idx, "neutral")
+
+    except Exception:
+        return "neutral"
+
+
+def process_comment(comment: CommentResult, product: str) -> CommentResult:
+    text = comment.summary
+
+    summary = shorten_with_ollama(text) if len(text) >= SUMMARISE_MIN_LENGTH else text
+
+    overall = get_overall_sentiment(summary, product)
+
+    return CommentResult(
+        summary=summary,
+        sentiments=comment.sentiments,
+        overall_sentiment=overall            
+    )
 
 
 @router.post("/process_comments", response_model=ProcessingResponse)
-async def clean_comments(
-    reddit_data: RedditResponse,
-):
+async def process_comments(data: FilterResponse):
     results: Dict[int, CommentResult] = {}
 
-    for idx, comment in enumerate(reddit_data.comments):
-        original_text = (
-            comment.get("comment", "")
-            if isinstance(comment, dict)
-            else str(comment)
-        )
-        results[idx] = process_comment(original_text, reddit_data.product)
+    for idx, comment in data.comments.items():
+        results[idx] = process_comment(comment, data.product)
 
     return ProcessingResponse(
-        product=reddit_data.product,
-        count=reddit_data.count,
+        product=data.product,
+        category=data.category,
+        aspects=data.aspects,
+        count=data.count,
         comments=results,
     )

@@ -15,17 +15,26 @@ client = genai.Client(api_key=api_key)
 
 CACHE_FILE = "llm_data.json"
 
+
+# ✅ CHANGED: sentiment → sentiments
 class CommentResult(BaseModel):
     summary: str
-    sentiment: str          
+    sentiments: Dict[str, str]
+    overall_sentiment: str 
+
 
 class ProcessingResponse(BaseModel):
     product: str
+    category: str
+    aspects: List[str]
     count: int
     comments: Dict[int, CommentResult]
 
+
 class FinalInsightResponse(BaseModel):
     product: str
+    category: str
+    aspects: List[str]
     count: int
     overview: str
     unique_features: List[str]
@@ -35,7 +44,7 @@ class FinalInsightResponse(BaseModel):
     final_insight: str
 
 
-def load_cached_response(product: str, count: int) -> FinalInsightResponse | None:
+def load_cached_response(product: str, count: int, category: str, aspects: List[str]) -> Optional[FinalInsightResponse]:
     if not os.path.exists(CACHE_FILE):
         return None
     
@@ -43,7 +52,12 @@ def load_cached_response(product: str, count: int) -> FinalInsightResponse | Non
         with open(CACHE_FILE, "r") as f:
             cached_data = json.load(f)
         
-        if cached_data.get("product") == product and cached_data.get("count") == count:
+        if (
+            cached_data.get("product") == product and
+            cached_data.get("count") == count and
+            cached_data.get("category") == category and
+            cached_data.get("aspects") == aspects
+        ):
             return FinalInsightResponse(**cached_data)
     except (json.JSONDecodeError, KeyError, ValueError):
         pass
@@ -58,6 +72,7 @@ def save_response_to_cache(response: FinalInsightResponse) -> None:
 
 def final_llm_call(data: ProcessingResponse) -> FinalInsightResponse:
     input_json = data.model_dump_json(indent=2)
+
     prompt = f"""
     You are an expert product analyst and technical writer specializing in consumer opinion synthesis.
 
@@ -101,7 +116,7 @@ def final_llm_call(data: ProcessingResponse) -> FinalInsightResponse:
     Input Data:
     {input_json}
     """
-    
+
     response = client.models.generate_content(
         model="gemini-2.5-flash-lite",
         contents=prompt,
@@ -109,11 +124,17 @@ def final_llm_call(data: ProcessingResponse) -> FinalInsightResponse:
             "temperature": 0,
             "max_output_tokens": 1000,
             "response_mime_type": "application/json"
-        })
-    
+        }
+    )
+
     result_dict = json.loads(response.text)
+
+    # ✅ propagate unchanged
     result_dict["product"] = data.product
+    result_dict["category"] = data.category
+    result_dict["aspects"] = data.aspects
     result_dict["count"] = data.count
+
     validated = FinalInsightResponse(**result_dict)
     return validated
 
@@ -121,9 +142,15 @@ def final_llm_call(data: ProcessingResponse) -> FinalInsightResponse:
 @router.post("/llm", response_model=FinalInsightResponse)
 def llm_process(data: ProcessingResponse):
     try:
-        cached = load_cached_response(data.product, data.count)
+        cached = load_cached_response(
+            data.product,
+            data.count,
+            data.category,
+            data.aspects
+        )
         if cached:
             return cached
+
         result = final_llm_call(data)
         save_response_to_cache(result)
         return result

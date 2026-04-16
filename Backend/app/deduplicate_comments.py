@@ -1,13 +1,14 @@
 import re
 import numpy as np
 from typing import List, Dict
-from fastapi import APIRouter, HTTPException, FastAPI
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from sentence_transformers import SentenceTransformer
 
 router = APIRouter()
 
 model = SentenceTransformer('all-MiniLM-L6-v2')
+
 
 def clean_text(text: str) -> str:
     if not isinstance(text, str):
@@ -18,23 +19,24 @@ def clean_text(text: str) -> str:
     except Exception:
         pass
 
-    text = re.sub(r"(?m)^>+\s*", "", text)  
-    text = re.sub(r"\*{1,3}(.+?)\*{1,3}", r"\1", text, flags=re.DOTALL)  
-    text = re.sub(r"_{1,2}(.+?)_{1,2}", r"\1", text, flags=re.DOTALL) 
-    text = re.sub(r"`{1,3}[\s\S]*?`{1,3}", "", text)  
-    text = re.sub(r"#+\s*", "", text)  
-    text = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", text)  
-    text = re.sub(r"https?://\S+", "", text) 
-    text = re.sub(r"(?m)^-{3,}$", "", text)  
+    text = re.sub(r"(?m)^>+\s*", "", text)
+    text = re.sub(r"\*{1,3}(.+?)\*{1,3}", r"\1", text, flags=re.DOTALL)
+    text = re.sub(r"_{1,2}(.+?)_{1,2}", r"\1", text, flags=re.DOTALL)
+    text = re.sub(r"`{1,3}[\s\S]*?`{1,3}", "", text)
+    text = re.sub(r"#+\s*", "", text)
+    text = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", text)
+    text = re.sub(r"https?://\S+", "", text)
+    text = re.sub(r"(?m)^-{3,}$", "", text)
     text = re.sub(r"&amp;", "&", text)
     text = re.sub(r"&lt;", "<", text)
     text = re.sub(r"&gt;", ">", text)
     text = re.sub(r"&quot;|&#34;", '"', text)
     text = re.sub(r"&#?\w+;", " ", text)
-    text = re.sub(r"[\x00-\x1f\x7f-\x9f]", " ", text)  
+    text = re.sub(r"[\x00-\x1f\x7f-\x9f]", " ", text)
     text = re.sub(r"\s+", " ", text).strip()
-    
+
     return text if len(text) >= 5 else ""
+
 
 def cosine_similarity_numpy(a: np.ndarray, b: np.ndarray) -> np.ndarray:
     a = a / (np.linalg.norm(a) + 1e-10)
@@ -42,15 +44,22 @@ def cosine_similarity_numpy(a: np.ndarray, b: np.ndarray) -> np.ndarray:
     b_normalized = b / b_norms
     return b_normalized @ a
 
+
 class ProductComments(BaseModel):
     product: str
+    category: str
+    aspects: List[str]
     count: int
     comments: List[Dict[str, str]]
 
+
 class DeduplicationResponse(BaseModel):
     product: str
+    category: str
+    aspects: List[str]
     count: int
     comments: List[Dict[str, str]]
+
 
 @router.post("/deduplicate", response_model=DeduplicationResponse)
 async def deduplicate_comments(
@@ -59,7 +68,13 @@ async def deduplicate_comments(
 ):
     try:
         if not data.comments:
-            return DeduplicationResponse(product=data.product, count=0, comments=[])
+            return DeduplicationResponse(
+                product=data.product,
+                category=data.category,
+                aspects=data.aspects,
+                count=0,
+                comments=[]
+            )
 
         processed_comments = []
         for c in data.comments:
@@ -68,7 +83,13 @@ async def deduplicate_comments(
                 processed_comments.append(cleaned)
 
         if not processed_comments:
-            return DeduplicationResponse(product=data.product, count=0, comments=[])
+            return DeduplicationResponse(
+                product=data.product,
+                category=data.category,
+                aspects=data.aspects,
+                count=0,
+                comments=[]
+            )
 
         embeddings = model.encode(processed_comments)
 
@@ -85,9 +106,11 @@ async def deduplicate_comments(
 
         return DeduplicationResponse(
             product=data.product,
+            category=data.category,
+            aspects=data.aspects,
             count=len(unique_comments),
             comments=unique_comments,
         )
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Internal Server Error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))

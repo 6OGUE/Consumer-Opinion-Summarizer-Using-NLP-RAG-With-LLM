@@ -1,7 +1,7 @@
 import { useState, useRef } from "react";
 import "./App.css";
 
-import type { Stage, RedditData, ProcessedData, PipelineStep, FinalInsightResponse } from './types';
+import type { Stage, RedditData, ProcessedData, PipelineStep, FinalInsightResponse, ScoreResponse, CommentResult, ChatMessage } from './types';
 import { STEPS } from './constants';
 import { post } from './utils';
 import ProgressBar from './components/ProgressBar';
@@ -41,7 +41,7 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [steps, setSteps] = useState<PipelineStep[]>(STEPS.map((s) => ({ ...s })));
-  const [score, setScore] = useState<{ score: number } | null>(null);
+  const [score, setScore] = useState<ScoreResponse | null>(null);
   const [processedData, setProcessedData] = useState<ProcessedData | null>(null);
   const [finalInsight, setFinalInsight] = useState<FinalInsightResponse | null>(null);
   const [sources, setSources] = useState<string[]>([]);
@@ -112,18 +112,29 @@ export default function App() {
 
     try {
       setStep(0, "loading");
+      
+      // First classify the product to get category and aspects
+      const classification = await post<{ product: string; category: string; aspects: string[] }>("/classify_product/classify_product", {
+        extracted:product,
+      });
+      
+      // Then scrape Reddit with the full data
       const reddit = await post<RedditData>("/reddit_extract/scrape-reddit", {
-        product,
+        product: classification.product,
+        category: classification.category,
+        aspects: classification.aspects,
         limit,
       });
       setSources(reddit.sources);
       setStep(0, "done");
 
-      let payload: { product: string; count: number; comments: unknown } = {
-        product: reddit.product,
-        count: reddit.count,
-        comments: reddit.comments,
-      };
+      let payload = {
+  product: reddit.product,
+  category: reddit.category,     // ✅ added
+  aspects: reddit.aspects,       // ✅ added
+  count: reddit.count,
+  comments: reddit.comments,
+};
 
       setStep(1, "loading");
       payload = await post("/remove_duplicates/deduplicate", payload);
@@ -139,7 +150,7 @@ export default function App() {
       setStep(3, "done");
 
       setStep(4, "loading");
-      const scoreRes = await post<{ score: number }>("/score_finder/calc_score", processed);
+      const scoreRes = await post<ScoreResponse>("/score_finder/calc_score", processed);
       setScore(scoreRes);
       setStep(4, "done");
 
@@ -189,7 +200,7 @@ export default function App() {
                 <input
                   className="input-field"
                   type="text"
-                  placeholder="e.g. Is the iphone 14 worth purchasing?"
+                  placeholder="e.g. Is the iphone 13 worth purchasing?"
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && handleGo()}
@@ -299,7 +310,7 @@ export default function App() {
           <div className="pipeline-stage" ref={resultRef}>
             <div className="brand-eyebrow"></div>
             <div className="card pipeline-card">
-              <div className="card-label" style={{ textAlign: 'center' }}>Pipeline</div>
+              <div className="card-label" style={{ textAlign: 'center' }}></div>
               <ProgressBar steps={steps} />
               <div className="pipeline-divider" />
               <div className="pipeline-engine-label"></div>
@@ -346,7 +357,7 @@ export default function App() {
               <button
                 className="icon-btn"
                 title="Download PDF"
-                onClick={() => finalInsight && exportInsightsToPDF(finalInsight, processedData?.product || '', score?.score || null)}
+                onClick={() => finalInsight && exportInsightsToPDF(finalInsight, processedData?.product || '', score?.overall_score || null)}
               >
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
@@ -358,9 +369,24 @@ export default function App() {
           </div>
 
           <div className="score-row">
-            {score?.score != null && (
-              <ScoreRing score={score.score} isHigh={score.score > 50} />
-            )}
+            {score && (
+  <>
+    {/* Overall Score */}
+    <ScoreRing score={score.overall_score} isHigh={score.overall_score > 50} />
+
+    {/* Aspect Scores */}
+    <div style={{ display: "flex", gap: "20px", flexWrap: "wrap", marginTop: "16px" }}>
+      {Object.entries(score.aspect_scores).map(([aspect, value]) => (
+        <div key={aspect} style={{ textAlign: "center" }}>
+          <ScoreRing score={value} isHigh={value > 50} />
+          <div style={{ marginTop: 6, fontSize: 12, opacity: 0.7 }}>
+            {aspect}
+          </div>
+        </div>
+      ))}
+    </div>
+  </>
+)}
             <div className="score-meta">
               <div className="score-meta-label">Overall Score</div>
               <p className="score-meta-desc">

@@ -9,9 +9,25 @@ export type Stage =
 
 export interface RedditData {
   product: string;
+  category: string;        // ✅ added
+  aspects: string[];       // ✅ added
   count: number;
   comments: unknown;
   sources: string[];
+}
+
+export interface CommentResult {
+  summary: string;
+  sentiments: Record<string, string>;   // ✅ added
+  overall_sentiment: string;            // ✅ added
+}
+
+export interface ProcessedData {
+  product: string;
+  category: string;                    // ✅ added
+  aspects: string[];                  // ✅ added
+  count: number;
+  comments: Record<number, CommentResult>; // ✅ fixed type
 }
 
 export interface FinalInsightResponse {
@@ -23,10 +39,9 @@ export interface FinalInsightResponse {
   final_insight: string;
 }
 
-export interface ProcessedData {
-  product: string;
-  count: number;
-  comments: Record<number, unknown>;
+export interface ScoreResponse {
+  overall_score: number;              // ✅ updated
+  aspect_scores: Record<string, number>; // ✅ added
 }
 
 export interface PipelineStep {
