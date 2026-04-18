@@ -370,29 +370,23 @@ export default function App() {
 
           <div className="score-row">
             {score && (
-  <>
-    {/* Overall Score */}
-    <ScoreRing score={score.overall_score} isHigh={score.overall_score > 50} />
-
-    {/* Aspect Scores */}
-    <div style={{ display: "flex", gap: "20px", flexWrap: "wrap", marginTop: "16px" }}>
-      {Object.entries(score.aspect_scores).map(([aspect, value]) => (
-        <div key={aspect} style={{ textAlign: "center" }}>
-          <ScoreRing score={value} isHigh={value > 50} />
-          <div style={{ marginTop: 6, fontSize: 12, opacity: 0.7 }}>
-            {aspect}
-          </div>
-        </div>
-      ))}
-    </div>
-  </>
-)}
-            <div className="score-meta">
-              <div className="score-meta-label">Overall Score</div>
-              <p className="score-meta-desc">
-                Performance reflects a balanced integration of hardware and software optimized for long‑term reliability.
-              </p>
-            </div>
+              <>
+                <div className="score-main">
+                  <ScoreRing score={score.overall_score} isHigh={score.overall_score > 50} />
+                  <div className="score-meta">
+                    <div className="score-meta-label">Overall Score</div>
+                  </div>
+                </div>
+                <div className="score-aspects">
+                  {Object.entries(score.aspect_scores).map(([aspect, value]) => (
+                    <div key={aspect} className="score-aspect-item">
+                      <ScoreRing score={value} isHigh={value > 50} />
+                      <div className="score-aspect-label">{aspect}</div>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
           </div>
 
           <div className="insights-body">
@@ -413,11 +407,11 @@ export default function App() {
 
             <div className="divider" />
             <h3>Alternatives</h3>
-            <ul>{finalInsight.alternatives.map((item, idx) => <li key={idx}>{item}</li>)}</ul>
+            <ul className="centered-list">{finalInsight.alternatives.map((item, idx) => <li key={idx}>{item}</li>)}</ul>
 
             <div className="divider" />
             <h2>Final Insight</h2>
-            <p>{finalInsight.final_insight}</p>
+            {[finalInsight.final_insight].map((item, idx) => <li key={idx}>{item}</li>)}
 
             {sources.length > 0 && (
               <>

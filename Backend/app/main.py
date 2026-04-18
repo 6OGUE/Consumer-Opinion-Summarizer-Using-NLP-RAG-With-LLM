@@ -1,16 +1,16 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from local_query_processing import router as product_extract_local
-from llm_query_proessing_hosted import router as product_extract_hosted
-from reddit_extraction import router as reddit_extract
-from deduplicate_comments import router as remove_duplicates
-from capture_semantics import router as cleanup_comments
-from local_comment_processing import router as process_comments
-from score_calculate import router as score_finder
-from final_llm_call import router as final_call
-from chatbot import router as chatbot
-from classify_product import router as classify_product
+from app.local_query_processing import router as product_extract_local
+from app.llm_query_proessing_hosted import router as product_extract_hosted
+from app.reddit_extraction import router as reddit_extract
+from app.deduplicate_comments import router as remove_duplicates
+from app.capture_semantics import router as cleanup_comments
+from app.local_comment_processing import router as process_comments
+from app.score_calculate import router as score_finder
+from app.final_llm_call import router as final_call
+from app.chatbot import router as chatbot
+from app.classify_product import router as classify_product
 
 app = FastAPI()
 

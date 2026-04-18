@@ -24,7 +24,7 @@ logging.getLogger("transformers.tokenization_utils_base").setLevel(logging.ERROR
 
 PRODUCT_DICT: set[str] = set()
 
-def load_product_dictionary(file_path="../products.txt"):
+def load_product_dictionary(file_path="./products.txt"):
     global PRODUCT_DICT
     try:
         with open(file_path, "r", encoding="utf-8") as f:

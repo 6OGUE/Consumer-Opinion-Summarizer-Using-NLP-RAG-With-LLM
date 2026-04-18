@@ -732,6 +732,8 @@ pixel 5a
 apple pencil 1
 arctic mx-4
 iphone 16 plus
+iphone 17
+iphone 17 pro
 philips hue bulb
 sony linkbuds s
 bose quietcomfort 2
