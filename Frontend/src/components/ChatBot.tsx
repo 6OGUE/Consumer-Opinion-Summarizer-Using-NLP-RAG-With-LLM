@@ -42,6 +42,8 @@ function ChatBot({
     try {
       const res = await post<{ answer?: string; response?: string; message?: string }>("/chatbot/chat", {
         product: processedData.product,
+        category: processedData.category,   // ✅ add this
+  aspects: processedData.aspects,
         count: processedData.count,
         comments: Object.values(processedData.comments),
         question,
