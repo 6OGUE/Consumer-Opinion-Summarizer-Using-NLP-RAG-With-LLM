@@ -34,10 +34,11 @@ CATEGORY_ASPECTS: Dict[str, List[str]] = {
     "gaming console": ["performance", "game library", "graphics", "cooling"],
     "refrigerator": ["cooling", "energy efficiency", "storage", "noise"],
     "washing machine": ["cleaning", "efficiency", "noise", "capacity"],
+    "None":["None"]
 }
 
 VALID_CATEGORIES = list(CATEGORY_ASPECTS.keys())
-FALLBACK_CATEGORY = "mobile"
+FALLBACK_CATEGORY = "None"
 
 
 # =======================
@@ -72,8 +73,8 @@ Reply with only the category name. No punctuation, no explanation."""
                 "prompt": prompt,
                 "stream": False,
                 "options": {
-                    "temperature": 0,       # deterministic output
-                    "num_predict": 10,      # category name is short, no need for more
+                    "temperature": 0,       
+                    "num_predict": 10,      
                 },
             },
             timeout=30.0,
