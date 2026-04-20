@@ -2,7 +2,7 @@ import { useState, useRef } from "react";
 import "./App.css";
 
 import type { Stage, RedditData, ProcessedData, PipelineStep, FinalInsightResponse, ScoreResponse, CommentResult, ChatMessage } from './types';
-import { STEPS } from './constants';
+import { STEPS, API_PATHS } from './constants';
 import { post } from './utils';
 import ProgressBar from './components/ProgressBar';
 import ChatBot from './components/ChatBot';
@@ -119,7 +119,7 @@ export default function App() {
       });
       
       // Then scrape Reddit with the full data
-      const reddit = await post<RedditData>("/reddit_extract/scrape-reddit", {
+      const reddit = await post<RedditData>(API_PATHS.redditScrape, {
         product: classification.product,
         category: classification.category,
         aspects: classification.aspects,

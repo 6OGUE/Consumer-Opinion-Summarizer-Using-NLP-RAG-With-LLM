@@ -37,6 +37,7 @@ HEADERS = {
 # =======================
 
 @router.post("/scrape-reddit", response_model=RedditResponse)
+@router.post("/scrape_reddit", response_model=RedditResponse)
 async def scrape_reddit(request: RedditRequest):
 
     # =======================

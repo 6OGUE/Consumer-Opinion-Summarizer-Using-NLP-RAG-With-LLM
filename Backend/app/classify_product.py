@@ -37,6 +37,7 @@ CATEGORY_ASPECTS: Dict[str, List[str]] = {
 }
 
 VALID_CATEGORIES = list(CATEGORY_ASPECTS.keys())
+FALLBACK_CATEGORY = "mobile"
 
 
 # =======================
@@ -52,21 +53,16 @@ OLLAMA_MODEL = "llama3.2:3b"
 # =======================
 
 def classify_product(product: str) -> str:
-    prompt = f"""
-You are a strict product classifier.
+    # Build a numbered list to make selection unambiguous
+    numbered = "\n".join(f"{i+1}. {cat}" for i, cat in enumerate(VALID_CATEGORIES))
 
-Choose ONLY ONE category from the list below:
+    prompt = f"""Classify the product into one of these categories:
 
-{", ".join(VALID_CATEGORIES)}
+{numbered}
 
-Product: {product}
+Product: "{product}"
 
-Rules:
-- Return ONLY the category name
-- No explanation
-- No extra text
-- Must match exactly from list
-"""
+Reply with only the category name. No punctuation, no explanation."""
 
     try:
         response = httpx.post(
@@ -75,22 +71,34 @@ Rules:
                 "model": OLLAMA_MODEL,
                 "prompt": prompt,
                 "stream": False,
+                "options": {
+                    "temperature": 0,       # deterministic output
+                    "num_predict": 10,      # category name is short, no need for more
+                },
             },
             timeout=30.0,
         )
-
         response.raise_for_status()
-        category = response.json().get("response", "").strip().lower()
 
-        # Safety check
-        if category not in VALID_CATEGORIES:
-            return "mobile"  # fallback default
+        raw = response.json().get("response", "").strip().lower()
 
-        return category
+        # Strip punctuation/quotes the model might add
+        raw = raw.strip("\"'.,!?").strip()
+
+        # Direct match
+        if raw in VALID_CATEGORIES:
+            return raw
+
+        # Partial match — handles cases like "mobile phone" → "mobile"
+        for cat in VALID_CATEGORIES:
+            if cat in raw:
+                return cat
+
+        return FALLBACK_CATEGORY
 
     except Exception as e:
         print(f"Ollama classification error: {e}")
-        return "mobile"  # fallback
+        return FALLBACK_CATEGORY
 
 
 # =======================
@@ -99,18 +107,17 @@ Rules:
 
 @router.post("/classify_product", response_model=CategoryResponse)
 async def classify(query: QueryResponse):
-
     product = query.extracted or ""
 
     if not product:
         return CategoryResponse(
             product="",
-            category="mobile",
-            aspects=CATEGORY_ASPECTS["mobile"]
+            category=FALLBACK_CATEGORY,
+            aspects=CATEGORY_ASPECTS[FALLBACK_CATEGORY]
         )
 
     category = classify_product(product)
-    aspects = CATEGORY_ASPECTS.get(category, CATEGORY_ASPECTS["mobile"])
+    aspects = CATEGORY_ASPECTS[category]  # always safe, fallback guarantees a valid key
 
     return CategoryResponse(
         product=product,
