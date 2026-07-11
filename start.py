@@ -7,7 +7,7 @@ def run_backend():
     backend_path = os.path.join(os.getcwd(), "Backend")
 
     process = subprocess.Popen(
-        "venv\\Scripts\\activate && uvicorn app.main:app --reload",
+        "venv\\Scripts\\activate && uvicorn app.main:app",
         shell=True,
         cwd=backend_path,
         stdout=subprocess.PIPE,
